@@ -1,6 +1,7 @@
 
 from pydantic import BaseModel
 from datetime import datetime, timezone
+import pandas as pd
 
 class LogRecord(BaseModel):
     """
@@ -109,3 +110,19 @@ with open(r"E:\incidentiq\data\raw\BGL_2k.log") as file:
     # print(label_comp)
     print(logs[0])
     print(logs[-1])
+
+    records = [log.model_dump() for log in logs]
+    df = pd.DataFrame(records)
+
+    print(df.head())
+    print(df.shape)
+    print(df.columns)
+    print(df.dtypes)
+
+    fatal_logs = df[df["severity"]=="FATAL"]
+    print(len(fatal_logs))
+
+    df.to_parquet(
+        r"E:\incidentiq\data\processed\logs.parquet",
+        index=False
+    )
