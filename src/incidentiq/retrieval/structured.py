@@ -6,11 +6,16 @@ df = pd.read_parquet(
         r"E:\incidentiq\data\processed\logs.parquet"
     )
 
-def search_logs(df, severity=None):
-    if severity is not None:
+def search_logs(df, severity=None, component=None):
+    if severity is not None and component is None:
         return df[df["severity"]==severity]
+    elif severity is None and component is not None:
+        return df[df["component"]==component]
+    elif severity is not None and component is not None:
+        return df[(df["severity"]==severity) & (df["component"]==component)]
     else:
-        return df[df["severity"]]
+        return df
+
             
 
 # print(search_logs(df, severity="INFO"))
@@ -18,4 +23,9 @@ def search_logs(df, severity=None):
 # print(search_logs(df, severity="WARNING"))
 # print(search_logs(df, severity="SEVERE"))
 print(search_logs(df, severity="ERROR"))
+print(search_logs(df, component="DISCOVERY"))
+print(search_logs(df, severity="ERROR", component="DISCOVERY"))
+print(search_logs(df))
+
+
 
