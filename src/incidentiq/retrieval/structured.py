@@ -2,6 +2,7 @@
 
 import pandas as pd
 from datetime import datetime
+import math
 
 df = pd.read_parquet(
         r"E:\incidentiq\data\processed\logs.parquet"
@@ -39,7 +40,7 @@ def search_logs(df, severity=None, component=None, start_time=None, end_time=Non
             )
         ]
 
-    print(results[["timestamp", "node", "severity", "message"]].head(10))
+    return results[["timestamp","message"]].head(10)
 
 # print(search_logs(df, severity="INFO"))
 # print(search_logs(df, severity="FATAL"))
@@ -53,5 +54,21 @@ def search_logs(df, severity=None, component=None, start_time=None, end_time=Non
 
 
 
-print(f"{search_logs(df,query="instruction cache")}\n")
-print(search_logs(df,query="core files"))
+# print(f"{search_logs(df,query="instruction cache")}\n")
+# print(search_logs(df,query="core files"))
+# print(search_logs(df,query="parity error"))
+
+# Number of documents in the corpus
+N = len(df)
+
+def document_frequency(df,term):
+    result = df["message"].str.contains(term,case=False,na=False).sum()
+    return result
+
+def idf(doc_freq):
+    return math.log(1+(N-doc_freq+0.5)/(doc_freq+0.5))
+
+for term in ["error", "cache", "parity", "KERNDTLB", "kernel"]:
+    doc_freq = document_frequency(df,term)
+    inverse_doc_freq = idf(doc_freq)
+    print(term, doc_freq, inverse_doc_freq)
