@@ -77,9 +77,55 @@ def term_frequency(term):
     )
 
 
-for term in ["error", "cache", "parity", "KERNDTLB", "kernel"]:
-    doc_freq = document_frequency(term)
-    inverse_doc_freq = idf(doc_freq)
-    term_freq = term_frequency(term)
-    print(f"\nTerm: {term}, DF: \n{doc_freq}, \nIDF: {inverse_doc_freq}, \n {term_freq["term_freq"].value_counts().sort_index()} \n")
+# for term in ["error", "cache", "parity", "KERNDTLB", "kernel"]:
+#     doc_freq = document_frequency(term)
+#     inverse_doc_freq = idf(doc_freq)
+#     term_freq = term_frequency(term)
+#     print(f"\nTerm: {term}, DF: \n{doc_freq}, \nIDF: {inverse_doc_freq}, \n {term_freq["term_freq"].value_counts().sort_index()} \n")
 
+df["doc_length"] = df["message"].str.split().str.len()
+
+# print(df["doc_length"].describe())
+
+avgdl = df["doc_length"].mean()
+
+# print("Average document length: ", avgdl)
+
+# print(df[["message","doc_length"]].head(-10))
+
+# print(df)
+
+def bm25score(document:str,query:str):
+    score = 0
+    k1 = 1.2
+    b = 0.75
+
+    for term in query.split():
+        DF = document_frequency(term)
+        IDF = idf(DF)
+        TF = document.lower().split().count(term.lower())
+        dl = len(document.split())
+        bm25_contribution_of_term = (
+            IDF * (
+                (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
+            )
+        )
+
+        print(
+            term,
+            "DF =", DF,
+            "IDF =", IDF,
+            "TF =", TF,
+            "DL =", dl,
+            "contribution =", bm25_contribution_of_term
+        )
+
+        score += bm25_contribution_of_term
+
+    return score
+
+
+document = "instruction cache parity error corrected"
+query = "cache error"
+
+print(bm25score(document, query))
