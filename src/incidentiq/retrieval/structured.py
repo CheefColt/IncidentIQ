@@ -61,14 +61,25 @@ def search_logs(df, severity=None, component=None, start_time=None, end_time=Non
 # Number of documents in the corpus
 N = len(df)
 
-def document_frequency(df,term):
-    result = df["message"].str.contains(term,case=False,na=False).sum()
-    return result
+def document_frequency(term):
+    return df["message"].str.contains(term,case=False,na=False).sum()
+    
 
 def idf(doc_freq):
     return math.log(1+(N-doc_freq+0.5)/(doc_freq+0.5))
 
+def term_frequency(term):
+    return df.loc[
+        df["message"].str.contains(term,case=False,na=False),
+        ["message"]
+    ].assign(
+        term_freq=lambda x: x["message"].str.lower().str.count(term.lower())
+    )
+
+
 for term in ["error", "cache", "parity", "KERNDTLB", "kernel"]:
-    doc_freq = document_frequency(df,term)
+    doc_freq = document_frequency(term)
     inverse_doc_freq = idf(doc_freq)
-    print(term, doc_freq, inverse_doc_freq)
+    term_freq = term_frequency(term)
+    print(f"\nTerm: {term}, DF: \n{doc_freq}, \nIDF: {inverse_doc_freq}, \n {term_freq["term_freq"].value_counts().sort_index()} \n")
+
