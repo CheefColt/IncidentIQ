@@ -111,21 +111,44 @@ def bm25score(document:str,query:str):
             )
         )
 
-        print(
-            term,
-            "DF =", DF,
-            "IDF =", IDF,
-            "TF =", TF,
-            "DL =", dl,
-            "contribution =", bm25_contribution_of_term
-        )
+        # print(
+        #     term,
+        #     "DF =", DF,
+        #     "IDF =", IDF,
+        #     "TF =", TF,
+        #     "DL =", dl,
+        #     "contribution =", bm25_contribution_of_term
+        # )
 
         score += bm25_contribution_of_term
 
     return score
 
 
-document = "instruction cache parity error corrected"
-query = "cache error"
+# document = "instruction cache parity error corrected"
+# query = "cache error"
 
-print(bm25score(document, query))
+# print(bm25score(document, query))
+
+def bm25_search(query:str,top_k:int=10):
+    results = []
+
+    for _, row in df.iterrows():
+
+        document = row["message"]
+        score = bm25score(document,query)
+
+        results.append(
+            {"score": score,
+             "log_id": row["log_id"],
+             "timestamp": row["timestamp"],
+             "node": row["node"],
+             "severity": row["severity"],
+             "message": row["message"]
+            }
+        )
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:top_k]
+
+print(bm25_search("cache error"))
