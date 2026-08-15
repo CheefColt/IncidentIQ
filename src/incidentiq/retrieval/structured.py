@@ -61,8 +61,8 @@ def search_logs(df, severity=None, component=None, start_time=None, end_time=Non
 # Number of documents in the corpus
 N = len(df)
 
-def document_frequency(term):
-    return df["message"].str.contains(term,case=False,na=False).sum()
+# def document_frequency(term):
+#     return df["message"].str.contains(term,case=False,na=False).sum()
     
 
 def idf(doc_freq):
@@ -95,63 +95,65 @@ avgdl = df["doc_length"].mean()
 
 # print(df)
 
-def bm25score(document:str,query:str):
-    score = 0
-    k1 = 1.2
-    b = 0.75
+# Initial BM25 Score Function
 
-    for term in query.split():
-        DF = document_frequency(term)
-        IDF = idf(DF)
-        TF = document.lower().split().count(term.lower())
-        dl = len(document.split())
-        bm25_contribution_of_term = (
-            IDF * (
-                (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
-            )
-        )
+# def BM25score(document:str,query:str):
+#     score = 0
+#     k1 = 1.2
+#     b = 0.75
 
-        # print(
-        #     term,
-        #     "DF =", DF,
-        #     "IDF =", IDF,
-        #     "TF =", TF,
-        #     "DL =", dl,
-        #     "contribution =", bm25_contribution_of_term
-        # )
+#     for term in query.split():
+#         DF = document_frequency(term)
+#         IDF = idf(DF)
+#         TF = document.lower().split().count(term.lower())
+#         dl = len(document.split())
+#         bm25_contribution_of_term = (
+#             IDF * (
+#                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
+#             )
+#         )
 
-        score += bm25_contribution_of_term
+#         # print(
+#         #     term,
+#         #     "DF =", DF,
+#         #     "IDF =", IDF,
+#         #     "TF =", TF,
+#         #     "DL =", dl,
+#         #     "contribution =", bm25_contribution_of_term
+#         # )
 
-    return score
+#         score += bm25_contribution_of_term
+
+#     return score
 
 
 # document = "instruction cache parity error corrected"
 # query = "cache error"
 
-# print(bm25score(document, query))
+# print(BM25score(document, query))
 
-def bm25_search(query:str,top_k:int=10):
-    results = []
+# def bm25_search(query:str,top_k:int=10):
+#     results = []
 
-    for _, row in df.iterrows():
+#     for _, row in df.iterrows():
 
-        document = row["message"]
-        score = bm25score(document,query)
+#         document = row["message"]
+#         score = BM25score(document,query)
 
-        results.append(
-            {"score": score,
-             "log_id": row["log_id"],
-             "timestamp": row["timestamp"],
-             "node": row["node"],
-             "severity": row["severity"],
-             "message": row["message"]
-            }
-        )
+#         results.append(
+#             {"score": score,
+#              "log_id": row["log_id"],
+#              "timestamp": row["timestamp"],
+#              "node": row["node"],
+#              "severity": row["severity"],
+#              "message": row["message"]
+#             }
+#         )
 
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:top_k]
+#     results.sort(key=lambda x: x["score"], reverse=True)
+#     return results[:top_k]
 
-# print(bm25_search("cache error"))
+# print(BM25_search("cache error"))
 
 ## Learn Inverted Index
 
@@ -167,5 +169,92 @@ for doc_id, row in df.iterrows():
         inverted_index.setdefault(term,set()).add(doc_id)
 
 
-print(inverted_index["cache"])
-print(inverted_index["error"])
+# print(inverted_index["cache"])
+# print(inverted_index["error"])
+
+query = "cache error"
+
+# candidate_docs = set()
+
+# for term in query.split():
+#     candidate_docs.update(inverted_index[term])
+
+# print(candidate_docs)
+# print(len(candidate_docs))
+
+# Updating Document Frequency function
+def document_frequency(term):
+    return len(inverted_index.get(term.lower(), set()))
+
+# Created an index of IDF
+idf_scores = {}
+
+for term in inverted_index:
+    doc_freq = document_frequency(term)
+    idf_scores[term] = idf(doc_freq)
+
+
+# print(idf_scores["cache"])
+# print(idf_scores["error"])
+# print(idf_scores["kernel"])
+
+
+def updated_BM25score(document:str,query:str):
+    score = 0
+    k1 = 1.2
+    b = 0.75
+
+    for term in query.split():
+        DF = document_frequency(term)
+        IDF = idf_scores[term]
+        TF = document.lower().split().count(term.lower())
+        dl = len(document.split())
+        bm25_contribution_of_term = (
+            IDF * (
+                (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
+            )
+        )
+
+        score += bm25_contribution_of_term
+
+    return score
+
+def updated_BM25_search(query:str,top_k:int=10):
+    candidate_docs = set()
+    for term in query.lower().split():
+        candidate_docs.update(inverted_index[term])
+
+    print("Candidates:", len(candidate_docs))
+
+    results = []
+
+    for doc_id in candidate_docs:
+
+        row = df.loc[doc_id]
+        document = row["message"]
+        score = updated_BM25score(document,query)
+        
+        results.append(
+            {"score": score,
+             "log_id": row["log_id"],
+             "timestamp": row["timestamp"],
+             "node": row["node"],
+             "severity": row["severity"],
+             "message": row["message"]
+            }
+        )
+
+    results.sort(key=lambda x: x["score"], reverse=True)
+    return results[:top_k]
+
+print(updated_BM25_search(query="parity error"))
+
+# print("Rows:", len(df))
+
+# print("DF(error):", document_frequency("error"))
+# print("Index(error):", len(inverted_index.get("error", set())))
+
+# print("DF(cache):", document_frequency("cache"))
+# print("Index(cache):", len(inverted_index.get("cache", set())))
+# print(updated_BM25_search(query="cache error"))
+
