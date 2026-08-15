@@ -151,4 +151,21 @@ def bm25_search(query:str,top_k:int=10):
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:top_k]
 
-print(bm25_search("cache error"))
+# print(bm25_search("cache error"))
+
+## Learn Inverted Index
+
+inverted_index = {}
+
+for doc_id, row in df.iterrows():
+
+    document = row["message"]
+
+    terms = document.lower().split()
+
+    for term in terms:
+        inverted_index.setdefault(term,set()).add(doc_id)
+
+
+print(inverted_index["cache"])
+print(inverted_index["error"])
