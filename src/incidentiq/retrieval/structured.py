@@ -3,6 +3,7 @@
 import pandas as pd
 from datetime import datetime
 import math
+from collections import Counter
 
 df = pd.read_parquet(
         r"E:\incidentiq\data\processed\logs.parquet"
@@ -159,14 +160,25 @@ avgdl = df["doc_length"].mean()
 
 inverted_index = {}
 
+# for doc_id, row in df.iterrows():
+
+#     document = row["message"]
+
+#     terms = document.lower().split()
+
+#     for term in terms:
+#         inverted_index.setdefault(term,set()).add(doc_id)
+
+## Updating Inverted Index to store term : {doc_id : TF of term}
 for doc_id, row in df.iterrows():
 
-    document = row["message"]
+    document:str = row["message"]
 
     terms = document.lower().split()
+    term_counts = Counter(terms)
 
-    for term in terms:
-        inverted_index.setdefault(term,set()).add(doc_id)
+    for term, tf in term_counts.items():
+        inverted_index.setdefault(term,{})[doc_id] = tf
 
 
 # print(inverted_index["cache"])
@@ -184,9 +196,9 @@ query = "cache error"
 
 # Updating Document Frequency function
 def document_frequency(term):
-    return len(inverted_index.get(term.lower(), set()))
+    return len(inverted_index.get(term.lower(), {}))
 
-# Created an index of IDF
+# Created an index for IDF
 idf_scores = {}
 
 for term in inverted_index:
@@ -199,16 +211,14 @@ for term in inverted_index:
 # print(idf_scores["kernel"])
 
 
-def updated_BM25score(document:str,query:str):
+def updated_BM25score(doc_id:int,query:str,dl:int):
     score = 0
     k1 = 1.2
     b = 0.75
 
-    for term in query.split():
-        DF = document_frequency(term)
+    for term in query.lower().split():
         IDF = idf_scores[term]
-        TF = document.lower().split().count(term.lower())
-        dl = len(document.split())
+        TF = inverted_index[term].get(doc_id, 0)
         bm25_contribution_of_term = (
             IDF * (
                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
@@ -231,8 +241,7 @@ def updated_BM25_search(query:str,top_k:int=10):
     for doc_id in candidate_docs:
 
         row = df.loc[doc_id]
-        document = row["message"]
-        score = updated_BM25score(document,query)
+        score = updated_BM25score(doc_id,query,row["doc_length"])
         
         results.append(
             {"score": score,
