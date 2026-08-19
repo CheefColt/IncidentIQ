@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime
 import math
 from collections import Counter
+import re
 
 df = pd.read_parquet(
         r"E:\incidentiq\data\processed\logs.parquet"
@@ -256,7 +257,7 @@ def updated_BM25_search(query:str,top_k:int=10):
     results.sort(key=lambda x: x["score"], reverse=True)
     return results[:top_k]
 
-print(updated_BM25_search(query="parity error"))
+# print(updated_BM25_search(query="parity error"))
 
 # print("Rows:", len(df))
 
@@ -267,3 +268,78 @@ print(updated_BM25_search(query="parity error"))
 # print("Index(cache):", len(inverted_index.get("cache", set())))
 # print(updated_BM25_search(query="cache error"))
 
+# for row in df[["log_id","message"]].head(20).itertuples():
+#     print(row.log_id, row.message)
+
+# def tokenize(text:str):
+#     text = text.lower()
+
+#     return re.findall(
+#         r"[a-z0-9_./:-]+",
+#         text
+#     )
+
+# tests = [
+#     "instruction cache parity error corrected",
+#     "double-hummer alignment exceptions",
+#     "CE sym 2, at 0x0b5eee0, mask 0x05",
+#     "CioStream socket to 172.16.96.116:33569",
+#     "generating core.862",
+#     "R02-M1-N0-C:J12-U11",
+#     "fpr29=0xffffffff",
+#     "/g/g24/germann2/SPaSM_mini/MEAM/r13"
+# ]
+
+# for text in tests:
+#     print(text)
+#     print(tokenize(text))
+#     print()
+
+documents = {
+    0: "instruction cache parity error",
+    1: "cache parity instruction error"
+}
+
+positional_index = {}
+
+for doc_id, document in documents.items():
+
+    terms = document.lower().split()
+
+    for position, term in enumerate(terms):
+        positional_index.setdefault(term,{}).setdefault(doc_id,[]).append(position)
+
+
+def phrase_search(query:str, positional_index:dict):
+    query_terms = query.lower().split()
+
+    if not query_terms:
+        return []
+
+    first_term = query_terms[0]
+
+    candidate_docs = positional_index.get(first_term,[])
+
+    matches = []
+
+    for doc_id, positions in candidate_docs.items():
+        for position in positions:
+            match = True
+
+            for offset, term in enumerate(query_terms[1:],start=1):
+                term_positions = positional_index.get(term,{}).get(doc_id,[])
+
+                if position + offset not in term_positions:
+                    match = False
+                    break
+
+            if match:
+                matches.append(doc_id)
+                break
+
+    return matches
+
+print(positional_index)
+print(phrase_search("instruction cache", positional_index))
+print(phrase_search("cache parity", positional_index))
+print(phrase_search("parity instruction", positional_index))
