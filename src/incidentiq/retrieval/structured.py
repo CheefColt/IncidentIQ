@@ -236,25 +236,56 @@ for term in inverted_index:
 # print(idf_scores["kernel"])
 
 
-def updated_BM25score(doc_id:int,query:str,dl:int):
+# def updated_BM25score(doc_id:int,query:str,dl:int):
+#     # Update with added postional index
+#     score = 0
+#     k1 = 1.2
+#     b = 0.75
+
+#     for term in query.lower().split():
+#         IDF = idf_scores[term]
+#         positions = positional_index[term].get(doc_id, [])
+#         TF = len(positions)
+#         bm25_contribution_of_term = (
+#             IDF * (
+#                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
+#             )
+#         )
+
+#         score += bm25_contribution_of_term
+
+#     return score
+
+# Update after implementation of Phrase and Term parsing 
+def updated_BM25score(doc_id:int,terms:list,dl:int):
     # Update with added postional index
     score = 0
     k1 = 1.2
     b = 0.75
 
-    for term in query.lower().split():
-        IDF = idf_scores[term]
+    for term in terms:
+
+        if term not in idf_scores:
+            continue
+
+        idf_value = idf_scores[term]
         positions = positional_index[term].get(doc_id, [])
-        TF = len(positions)
+        tf = len(positions)
+
+        if tf == 0:
+            continue
+
+
         bm25_contribution_of_term = (
-            IDF * (
-                (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
+            idf_value * (
+                (tf*(k1+1)) / (tf+ k1 * (1 - b + b * (dl/avgdl)))
             )
         )
 
         score += bm25_contribution_of_term
 
     return score
+
 
 def updated_BM25_search(query:str,top_k:int=10):
 
@@ -478,23 +509,109 @@ def phrase_search(phrase_terms:list, positional_index:dict):
     return matches
 
 
-print(
-    phrase_search(
-        ["instruction", "cache"],
-        positional_index
-    )
-)
+# print(
+#     phrase_search(
+#         ["instruction", "cache"],
+#         positional_index
+#     )
+# )
 
-print(
-    phrase_search(
-        ["cache", "parity"],
-        positional_index
-    )
-)
+# print(
+#     phrase_search(
+#         ["cache", "parity"],
+#         positional_index
+#     )
+# )
 
-print(
-    phrase_search(
-        ["parity", "instruction"],
-        positional_index
+# print(
+#     phrase_search(
+#         ["parity", "instruction"],
+#         positional_index
+#     )
+# )
+
+
+
+# Scoring Terms
+
+def get_scoring_terms(parsed_query):
+
+    scoring_terms = parse_query["terms"].copy()
+
+    for phrase in parsed_query["phrases"]:
+        scoring_terms.extend(phrase)
+
+    return scoring_terms
+
+
+# Retrive Candidate Documents
+
+def get_term_candidates(terms):
+    candidate_docs = set()
+
+    for term in terms:
+        candidate_docs.update(
+            positional_index.get(term,{})
+        )
+
+    return candidate_docs
+
+# Retrive multiple phrases candidates
+
+def get_phrase_candidates(phrases):
+
+    if not phrases:
+        return None
+
+    candidate_docs = None
+
+    for phrase in phrases:
+
+        phrase_docs = phrase_search(
+            phrase,
+            positional_index
+        )
+
+        if candidate_docs is None:
+            candidate_docs = phrase_docs
+        else:
+            candidate_docs &= phrase_docs
+
+    return candidate_docs
+
+
+# Combining Lexical and Phrase Retreival
+
+def get_candidates(parsed_query):
+    scoring_terms = get_scoring_terms(parsed_query)
+
+    term_docs = get_term_candidates(scoring_terms)
+
+    phrase_docs = get_phrase_candidates(
+        parsed_query["phrases"]
     )
-)
+
+    if phrase_docs is None:
+        return term_docs
+
+    return term_docs & phrase_docs
+
+
+# Adding Phrase Bonus
+PHRASE_BONUS:float = 2.0
+
+def calculate_phrase_bonus(doc_id:int, phrases:list):
+    bonus:float = 0
+
+    for phrase in phrases:
+
+        phrase_docs = phrase_search(
+            phrase,
+            positional_index
+        )
+
+        if doc_id in phrase_docs:
+            bonus += PHRASE_BONUS
+
+    return bonus
+
