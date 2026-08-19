@@ -424,9 +424,9 @@ def parse_query(query:str):
         tokens = tokenize(text)
 
         if inside_quotes:
-            current_phrase.append(tokens)
+            current_phrase.extend(tokens)
         else:
-            terms.append(tokens)
+            terms.extend(tokens)
 
         current_text = []
 
@@ -489,7 +489,7 @@ def phrase_search(phrase_terms:list, positional_index:dict):
 
     candidate_docs = positional_index.get(first_term,[])
 
-    matches = []
+    matches = set()
 
     for doc_id, positions in candidate_docs.items():
         for position in positions:
@@ -503,7 +503,7 @@ def phrase_search(phrase_terms:list, positional_index:dict):
                     break
 
             if match:
-                matches.append(doc_id)
+                matches.add(doc_id)
                 break
 
     return matches
@@ -536,7 +536,7 @@ def phrase_search(phrase_terms:list, positional_index:dict):
 
 def get_scoring_terms(parsed_query):
 
-    scoring_terms = parse_query["terms"].copy()
+    scoring_terms = parsed_query["terms"].copy()
 
     for phrase in parsed_query["phrases"]:
         scoring_terms.extend(phrase)
@@ -615,3 +615,59 @@ def calculate_phrase_bonus(doc_id:int, phrases:list):
 
     return bonus
 
+def search(query:str, top_k:int=10):
+    parsed = parse_query(query)
+
+    print("PARSED:", parsed)
+    print("TERMS:", parsed["terms"])
+    print("PHRASES:", parsed["phrases"])
+
+    scoring_terms = get_scoring_terms(parsed)
+
+    candidate_docs = get_candidates(parsed)
+
+    results = []
+
+    for doc_id in candidate_docs:
+
+        row = df.loc[doc_id]
+
+        bm25 = updated_BM25score(
+            doc_id,
+            scoring_terms,
+            row["doc_length"]
+        )
+
+        phrase_bonus = calculate_phrase_bonus(
+            doc_id,
+            parsed["phrases"]
+        )
+
+        final_score = bm25 + phrase_bonus
+
+        results.append({
+            "score": final_score,
+            "bm25": bm25,
+            "phrase_bonus": phrase_bonus,
+            "log_id": row["log_id"],
+            "timestamp": row["timestamp"],
+            "node": row["node"],
+            "severity": row["severity"],
+            "message": row["message"]
+        })
+
+    results.sort(key = lambda x: x["score"], reverse=True)
+
+    return results[:top_k]
+
+print(
+    search("cache parity error", 5)
+)
+
+print(
+    search('"cache parity error"', 5)
+)
+
+print(
+    search('cache "parity error"', 5)
+)
