@@ -44,6 +44,30 @@ def search_logs(df, severity=None, component=None, start_time=None, end_time=Non
 
     return results[["timestamp","message"]].head(10)
 
+# Move tokenize to the top 
+
+def tokenize(text:str):
+    text = text.lower()
+
+    return re.findall(
+        r"[a-z0-9_./:-]+",
+        text
+    )
+
+
+# Move Postional Index to top
+positional_index = {}
+
+for doc_id, row in df.iterrows():
+    terms = tokenize(row["message"])
+
+    for position, term in enumerate(terms):
+
+        positional_index \
+            .setdefault(term, {}) \
+            .setdefault(doc_id, []) \
+            .append(position)
+
 # print(search_logs(df, severity="INFO"))
 # print(search_logs(df, severity="FATAL"))
 # print(search_logs(df, severity="WARNING"))
@@ -275,13 +299,7 @@ def updated_BM25_search(query:str,top_k:int=10):
 # for row in df[["log_id","message"]].head(20).itertuples():
 #     print(row.log_id, row.message)
 
-def tokenize(text:str):
-    text = text.lower()
 
-    return re.findall(
-        r"[a-z0-9_./:-]+",
-        text
-    )
 
 # tests = [
 #     "instruction cache parity error corrected",
@@ -348,14 +366,83 @@ def tokenize(text:str):
 # print(phrase_search("cache parity", positional_index))
 # print(phrase_search("parity instruction", positional_index))
 
-positional_index = {}
 
-for doc_id, row in df.iterrows():
-    terms = tokenize(row["message"])
+def parse_query(query:str):
 
-    for position, term in enumerate(terms):
+    # Look for occurance of the char ' " '
+    # If found, split at that point, and everything before it get's added to terms by split appending them
+    # Find the next occurance of ' " ' and split them add them into one list of phrase terms
+    # And repeat this loop until end of sentence
+    # If not found, split the str and add all to terms
+    terms = []
+    phrases = []
 
-        positional_index \
-            .setdefault(term, {}) \
-            .setdefault(doc_id, []) \
-            .append(position)
+    inside_quotes = False
+    current_phrase = []
+    current_text = []
+
+    def flush_text():
+
+        nonlocal current_text
+
+        if not current_text:
+            return 
+
+        text = "".join(current_text)
+
+        tokens = tokenize(text)
+
+        if inside_quotes:
+            current_phrase.append(tokens)
+        else:
+            terms.append(tokens)
+
+        current_text = []
+
+    for char in query:
+
+        # Quote Encountered
+        if char == '"':
+
+            # Closing Quote
+            if inside_quotes:
+                flush_text()
+
+                if current_phrase:
+                    phrases.append(current_phrase)
+
+                current_phrase = []
+
+            # Opening Quote
+            else:
+                flush_text()
+
+            inside_quotes = not inside_quotes
+
+        # Whitespace encountered
+        elif char.isspace():
+            flush_text()
+        # Normal Charcter
+        else:
+            current_text.append(char)
+
+    flush_text()
+
+    return{
+        "terms" :  terms,
+        "phrases" : phrases
+    }
+
+tests = [
+    "cache error",
+    '"cache error"',
+    'cache "parity error"',
+    '"instruction cache" parity error',
+    'cache    "parity error"    kernel',
+    '"172.16.96.116:33569"',
+]
+
+for query in tests:
+    print(query)
+    print(parse_query(query))
+    print()
