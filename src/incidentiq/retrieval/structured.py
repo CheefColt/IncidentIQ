@@ -433,16 +433,68 @@ def parse_query(query:str):
         "phrases" : phrases
     }
 
-tests = [
-    "cache error",
-    '"cache error"',
-    'cache "parity error"',
-    '"instruction cache" parity error',
-    'cache    "parity error"    kernel',
-    '"172.16.96.116:33569"',
-]
+# tests = [
+#     "cache error",
+#     '"cache error"',
+#     'cache "parity error"',
+#     '"instruction cache" parity error',
+#     'cache    "parity error"    kernel',
+#     '"172.16.96.116:33569"',
+# ]
 
-for query in tests:
-    print(query)
-    print(parse_query(query))
-    print()
+# for query in tests:
+#     print(query)
+#     print(parse_query(query))
+#     print()
+
+# Updating Phrase Search
+def phrase_search(phrase_terms:list, positional_index:dict):
+
+
+    if not phrase_terms:
+        return set()
+
+    first_term = phrase_terms[0]
+
+    candidate_docs = positional_index.get(first_term,[])
+
+    matches = []
+
+    for doc_id, positions in candidate_docs.items():
+        for position in positions:
+            match = True
+
+            for offset, term in enumerate(phrase_terms[1:],start=1):
+                term_positions = positional_index.get(term,{}).get(doc_id,[])
+
+                if position + offset not in term_positions:
+                    match = False
+                    break
+
+            if match:
+                matches.append(doc_id)
+                break
+
+    return matches
+
+
+print(
+    phrase_search(
+        ["instruction", "cache"],
+        positional_index
+    )
+)
+
+print(
+    phrase_search(
+        ["cache", "parity"],
+        positional_index
+    )
+)
+
+print(
+    phrase_search(
+        ["parity", "instruction"],
+        positional_index
+    )
+)
