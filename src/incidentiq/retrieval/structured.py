@@ -3,7 +3,7 @@
 import pandas as pd
 from datetime import datetime
 import math
-from collections import Counter
+from collections import Counter, defaultdict
 import re
 
 df = pd.read_parquet(
@@ -195,9 +195,9 @@ query = "cache error"
 # print(candidate_docs)
 # print(len(candidate_docs))
 
-# Updating Document Frequency function
+# Updating Document Frequency function, after adding positional index
 def document_frequency(term):
-    return len(inverted_index.get(term.lower(), {}))
+    return len(positional_index.get(term.lower(), {}))
 
 # Created an index for IDF
 idf_scores = {}
@@ -213,13 +213,15 @@ for term in inverted_index:
 
 
 def updated_BM25score(doc_id:int,query:str,dl:int):
+    # Update with added postional index
     score = 0
     k1 = 1.2
     b = 0.75
 
     for term in query.lower().split():
         IDF = idf_scores[term]
-        TF = inverted_index[term].get(doc_id, 0)
+        positions = positional_index[term].get(doc_id, [])
+        TF = len(positions)
         bm25_contribution_of_term = (
             IDF * (
                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
@@ -231,9 +233,11 @@ def updated_BM25score(doc_id:int,query:str,dl:int):
     return score
 
 def updated_BM25_search(query:str,top_k:int=10):
+
+    # Update candidate retival, after addition of positional index
     candidate_docs = set()
     for term in query.lower().split():
-        candidate_docs.update(inverted_index[term])
+        candidate_docs.update(positional_index.get(term, {}))
 
     print("Candidates:", len(candidate_docs))
 
@@ -271,13 +275,13 @@ def updated_BM25_search(query:str,top_k:int=10):
 # for row in df[["log_id","message"]].head(20).itertuples():
 #     print(row.log_id, row.message)
 
-# def tokenize(text:str):
-#     text = text.lower()
+def tokenize(text:str):
+    text = text.lower()
 
-#     return re.findall(
-#         r"[a-z0-9_./:-]+",
-#         text
-#     )
+    return re.findall(
+        r"[a-z0-9_./:-]+",
+        text
+    )
 
 # tests = [
 #     "instruction cache parity error corrected",
@@ -295,51 +299,63 @@ def updated_BM25_search(query:str,top_k:int=10):
 #     print(tokenize(text))
 #     print()
 
-documents = {
-    0: "instruction cache parity error",
-    1: "cache parity instruction error"
-}
+# documents = {
+#     0: "instruction cache parity error",
+#     1: "cache parity instruction error"
+# }
+
+# positional_index = {}
+
+# for doc_id, document in documents.items():
+
+#     terms = document.lower().split()
+
+#     for position, term in enumerate(terms):
+#         positional_index.setdefault(term,{}).setdefault(doc_id,[]).append(position)
+
+
+# def phrase_search(query:str, positional_index:dict):
+#     query_terms = query.lower().split()
+
+#     if not query_terms:
+#         return []
+
+#     first_term = query_terms[0]
+
+#     candidate_docs = positional_index.get(first_term,[])
+
+#     matches = []
+
+#     for doc_id, positions in candidate_docs.items():
+#         for position in positions:
+#             match = True
+
+#             for offset, term in enumerate(query_terms[1:],start=1):
+#                 term_positions = positional_index.get(term,{}).get(doc_id,[])
+
+#                 if position + offset not in term_positions:
+#                     match = False
+#                     break
+
+#             if match:
+#                 matches.append(doc_id)
+#                 break
+
+#     return matches
+
+# print(positional_index)
+# print(phrase_search("instruction cache", positional_index))
+# print(phrase_search("cache parity", positional_index))
+# print(phrase_search("parity instruction", positional_index))
 
 positional_index = {}
 
-for doc_id, document in documents.items():
-
-    terms = document.lower().split()
+for doc_id, row in df.iterrows():
+    terms = tokenize(row["message"])
 
     for position, term in enumerate(terms):
-        positional_index.setdefault(term,{}).setdefault(doc_id,[]).append(position)
 
-
-def phrase_search(query:str, positional_index:dict):
-    query_terms = query.lower().split()
-
-    if not query_terms:
-        return []
-
-    first_term = query_terms[0]
-
-    candidate_docs = positional_index.get(first_term,[])
-
-    matches = []
-
-    for doc_id, positions in candidate_docs.items():
-        for position in positions:
-            match = True
-
-            for offset, term in enumerate(query_terms[1:],start=1):
-                term_positions = positional_index.get(term,{}).get(doc_id,[])
-
-                if position + offset not in term_positions:
-                    match = False
-                    break
-
-            if match:
-                matches.append(doc_id)
-                break
-
-    return matches
-
-print(positional_index)
-print(phrase_search("instruction cache", positional_index))
-print(phrase_search("cache parity", positional_index))
-print(phrase_search("parity instruction", positional_index))
+        positional_index \
+            .setdefault(term, {}) \
+            .setdefault(doc_id, []) \
+            .append(position)
