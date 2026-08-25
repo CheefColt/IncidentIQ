@@ -99,7 +99,7 @@ def term_frequency(term):
         df["message"].str.contains(term,case=False,na=False),
         ["message"]
     ].assign(
-        term_freq=lambda x: x["message"].str.lower().str.count(term.lower())
+        term_freq = lambda x: x["message"].str.lower().str.count(term.lower())
     )
 
 
@@ -660,14 +660,75 @@ def search(query:str, top_k:int=10):
 
     return results[:top_k]
 
-print(
-    search("cache parity error", 5)
-)
+# print(
+#     search("cache parity error", 5)
+# )
+
+# print(
+#     search('"cache parity error"', 5)
+# )
+
+# print(
+#     search('cache "parity error"', 5)
+# )
+
+def min_term_distance(doc_id:int, term1: str, term2: str):
+
+    positions1 = positional_index.get(term1.lower(),{}).get(doc_id,[])
+    positions2 = positional_index.get(term2.lower(),{}).get(doc_id,[])
+
+    if not positions1 or not positions2:
+        return None
+
+    min_distance = float("inf")
+
+    for position1 in positions1:
+        for position2 in positions2:
+
+            distance = abs(position1 - position2)
+
+            if distance < min_distance:
+                min_distance = distance
+
+    return min_distance
+
+from itertools import product
+
+def minimum_span(doc_id:int, terms:list):
+    positions = []
+
+    for term in terms:
+
+        term_positions = (
+            positional_index
+            .get(term.lower(),{})
+            .get(doc_id,[])
+        )
+
+        if not term_positions:
+            return None
+
+        positions.append(term_positions)
+
+    min_span = float("inf")
+
+    for combination in product(*positions):
+
+        start = min(combination)
+        end = max(combination)
+
+        span = end - start + 1
+
+        if span < min_span:
+            min_span = span
+
+        return min_span
+
 
 print(
-    search('"cache parity error"', 5)
-)
-
-print(
-    search('cache "parity error"', 5)
+    df.loc[1]["message"],
+    minimum_span(
+        1,
+        ["cache", "parity", "error"]
+    )
 )
