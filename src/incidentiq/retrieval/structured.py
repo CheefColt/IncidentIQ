@@ -725,10 +725,59 @@ def minimum_span(doc_id:int, terms:list):
         return min_span
 
 
+# print(
+#     df.loc[1]["message"],
+#     minimum_span(
+#         1,
+#         ["cache", "parity", "error"]
+#     )
+# )
+
+def proximity_score(doc_id:int, terms:list):
+    span = minimum_span(doc_id, terms)
+
+    if span is None:
+        return 0.0
+
+    minimum_possible_span = len(terms)
+
+    extra_distance = span - minimum_possible_span
+
+    return 1 / (1 + extra_distance)
+
 print(
-    df.loc[1]["message"],
     minimum_span(
-        1,
+        0,
         ["cache", "parity", "error"]
     )
 )
+
+print(
+    proximity_score(
+        0,
+        ["cache", "parity", "error"]
+    )
+)
+
+import random
+
+def five_rand_docs():
+
+    for doc_id in random.sample(
+        range(len(df)),
+        5
+    ):
+        yield doc_id
+
+for doc_id in five_rand_docs():
+
+    score = proximity_score(
+        doc_id,
+        ["cache", "parity", "error"]
+    )
+
+    print(
+        f"Doc: {doc_id} | "
+        f"Proximity: {score:.3f} | "
+        f"{df.loc[doc_id, 'message']}"
+    )
