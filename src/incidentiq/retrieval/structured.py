@@ -530,6 +530,11 @@ def phrase_search(phrase_terms:list, positional_index:dict):
 #     )
 # )
 
+# Weights
+
+BM25_WEIGHT = 1.0
+PHRASE_WEIGHT = 3.0
+PROXIMITY_WEIGHT = 2.0
 
 
 # Scoring Terms
@@ -585,92 +590,55 @@ def get_phrase_candidates(phrases):
 def get_candidates(parsed_query):
     scoring_terms = get_scoring_terms(parsed_query)
 
-    term_docs = get_term_candidates(scoring_terms)
+    return get_term_candidates(scoring_terms)
 
-    phrase_docs = get_phrase_candidates(
-        parsed_query["phrases"]
-    )
+    # phrase_docs = get_phrase_candidates(
+    #     parsed_query["phrases"]
+    # )
 
-    if phrase_docs is None:
-        return term_docs
+    # if phrase_docs is None:
+    #     return term_docs
 
-    return term_docs & phrase_docs
+    # return term_docs & phrase_docs
 
 
 # Adding Phrase Bonus
-PHRASE_BONUS:float = 2.0
+# PHRASE_BONUS:float = 2.0
 
-def calculate_phrase_bonus(doc_id:int, phrases:list):
-    bonus:float = 0
+# def calculate_phrase_bonus(doc_id:int, phrases:list):
+#     bonus:float = 0
+
+#     for phrase in phrases:
+
+#         phrase_docs = phrase_search(
+#             phrase,
+#             positional_index
+#         )
+
+#         if doc_id in phrase_docs:
+#             bonus += PHRASE_BONUS
+
+#     return bonus
+
+def phrase_matches(doc_id: int, phrase: list):
+
+    phrase_docs = phrase_search(
+        phrase,
+        positional_index
+    )
+
+    return doc_id in phrase_docs
+
+def calculate_phrase_score(doc_id: int, phrases: list):
+
+    matched_phrases = 0
 
     for phrase in phrases:
 
-        phrase_docs = phrase_search(
-            phrase,
-            positional_index
-        )
+        if phrase_matches(doc_id, phrase):
+            matched_phrases += 1
 
-        if doc_id in phrase_docs:
-            bonus += PHRASE_BONUS
-
-    return bonus
-
-def search(query:str, top_k:int=10):
-    parsed = parse_query(query)
-
-    print("PARSED:", parsed)
-    print("TERMS:", parsed["terms"])
-    print("PHRASES:", parsed["phrases"])
-
-    scoring_terms = get_scoring_terms(parsed)
-
-    candidate_docs = get_candidates(parsed)
-
-    results = []
-
-    for doc_id in candidate_docs:
-
-        row = df.loc[doc_id]
-
-        bm25 = updated_BM25score(
-            doc_id,
-            scoring_terms,
-            row["doc_length"]
-        )
-
-        phrase_bonus = calculate_phrase_bonus(
-            doc_id,
-            parsed["phrases"]
-        )
-
-        final_score = bm25 + phrase_bonus
-
-        results.append({
-            "score": final_score,
-            "bm25": bm25,
-            "phrase_bonus": phrase_bonus,
-            "log_id": row["log_id"],
-            "timestamp": row["timestamp"],
-            "node": row["node"],
-            "severity": row["severity"],
-            "message": row["message"]
-        })
-
-    results.sort(key = lambda x: x["score"], reverse=True)
-
-    return results[:top_k]
-
-# print(
-#     search("cache parity error", 5)
-# )
-
-# print(
-#     search('"cache parity error"', 5)
-# )
-
-# print(
-#     search('cache "parity error"', 5)
-# )
+    return PHRASE_WEIGHT * matched_phrases
 
 def min_term_distance(doc_id:int, term1: str, term2: str):
 
@@ -722,16 +690,7 @@ def minimum_span(doc_id:int, terms:list):
         if span < min_span:
             min_span = span
 
-        return min_span
-
-
-# print(
-#     df.loc[1]["message"],
-#     minimum_span(
-#         1,
-#         ["cache", "parity", "error"]
-#     )
-# )
+    return min_span
 
 def proximity_score(doc_id:int, terms:list):
     span = minimum_span(doc_id, terms)
@@ -745,39 +704,156 @@ def proximity_score(doc_id:int, terms:list):
 
     return 1 / (1 + extra_distance)
 
-print(
-    minimum_span(
-        0,
-        ["cache", "parity", "error"]
-    )
-)
+# PROXIMITY_WEIGHT = 2.0
 
-print(
-    proximity_score(
-        0,
-        ["cache", "parity", "error"]
-    )
-)
 
-import random
+def search(query:str, top_k:int=10):
+    parsed = parse_query(query)
 
-def five_rand_docs():
+    # print("PARSED:", parsed)
+    # print("TERMS:", parsed["terms"])
+    # print("PHRASES:", parsed["phrases"])
 
-    for doc_id in random.sample(
-        range(len(df)),
-        5
-    ):
-        yield doc_id
+    scoring_terms = get_scoring_terms(parsed)
 
-for doc_id in five_rand_docs():
+    candidate_docs = get_candidates(parsed)
 
-    score = proximity_score(
-        doc_id,
-        ["cache", "parity", "error"]
-    )
+    results = []
+
+    for doc_id in candidate_docs:
+
+        row = df.loc[doc_id]
+
+        bm25 = updated_BM25score(
+            doc_id,
+            scoring_terms,
+            row["doc_length"]
+        )
+
+        # phrase_bonus = phrase_matches(
+        #     doc_id,
+        #     parsed["phrases"]
+        # )
+        phrase_score = calculate_phrase_score(
+            doc_id,
+            parsed["phrases"]
+        )
+
+        proximity = proximity_score(
+            doc_id,
+            scoring_terms
+        )
+
+        if proximity is None:
+            proximity = 0.0
+
+        final_score = bm25 + phrase_score + PROXIMITY_WEIGHT * proximity
+
+        results.append({
+            "score": final_score,
+            "bm25": bm25,
+            "phrase_score": phrase_score,
+            "proximity": proximity,
+            "log_id": row["log_id"],
+            "timestamp": row["timestamp"],
+            "node": row["node"],
+            "severity": row["severity"],
+            "message": row["message"]
+        })
+
+    results.sort(key = lambda x: x["score"], reverse=True)
+
+    return results[:top_k]
+
+# print(
+#     search("cache parity error", 5)
+# )
+
+# print(
+#     search('"cache parity error"', 5)
+# )
+
+# print(
+#     search('cache "parity error"', 5)
+# )
+
+
+# print(search("cache parity error", 10))
+
+from collections import defaultdict
+
+terms = ["cache", "parity", "error"]
+
+groups = defaultdict(list)
+
+candidate_docs = get_term_candidates(terms)
+
+for doc_id in candidate_docs:
+
+    proximity = proximity_score(doc_id, terms)
+
+    groups[proximity].append(doc_id)
+
+for proximity in sorted(groups, reverse=True):
 
     print(
-        f"Doc: {doc_id} | "
-        f"Proximity: {score:.3f} | "
-        f"{df.loc[doc_id, 'message']}"
+        f"\nPROXIMITY = {proximity:.3f} "
+        f"({len(groups[proximity])} docs)"
     )
+
+    for doc_id in groups[proximity][:3]:
+
+        print(
+            "   ",
+            doc_id,
+            "|",
+            df.loc[doc_id, "message"]
+        )
+
+
+
+# print(
+#     df.loc[1]["message"],
+#     minimum_span(
+#         1,
+#         ["cache", "parity", "error"]
+#     )
+# )
+
+
+# print(
+#     minimum_span(
+#         0,
+#         ["cache", "parity", "error"]
+#     )
+# )
+
+# print(
+#     proximity_score(
+#         0,
+#         ["cache", "parity", "error"]
+#     )
+# )
+
+# import random
+
+# def five_rand_docs():
+
+#     for doc_id in random.sample(
+#         range(len(df)),
+#         5
+#     ):
+#         yield doc_id
+
+# for doc_id in five_rand_docs():
+
+#     score = proximity_score(
+#         doc_id,
+#         ["cache", "parity", "error"]
+#     )
+
+#     print(
+#         f"Doc: {doc_id} | "
+#         f"Proximity: {score:.3f} | "
+#         f"{df.loc[doc_id, 'message']}"
+#     )
