@@ -1,64 +1,94 @@
-## Defining a tool for the Agent to call for simple and direct retrieval search
+import math
+import re
+from collections import Counter
+from itertools import product
 
 import pandas as pd
-from datetime import datetime
-import math
-from collections import Counter, defaultdict
-import re
 
-df = pd.read_parquet(
-        r"E:\incidentiq\data\processed\logs.parquet"
-    )
 
-def search_logs(df, severity=None, component=None, start_time=None, end_time=None, query=None):
-    # if severity is not None and component is None:
-    #     return df[df["severity"]==severity]
-    # elif severity is None and component is not None:
-    #     return df[df["component"]==component]
-    # elif severity is not None and component is not None:
-    #     return df[(df["severity"]==severity) & (df["component"]==component)]
-    # else:
-    #     return df
-    results = df
+# ============================================================
+# CONFIGURATION
+# ============================================================
 
-    if severity:
-        results = results[results["severity"] == severity]
+DATA_PATH = r"E:\incidentiq\data\processed\logs.parquet"
 
-    if component:
-        results = results[results["component"] == component]
+K1 = 1.2
+B = 0.75
 
-    if start_time:
-        results = results[results["timestamp"] >= start_time]
+BM25_WEIGHT = 1.0
+PHRASE_WEIGHT = 3.0
+PROXIMITY_WEIGHT = 2.0
 
-    if end_time:
-        results = results[results["timestamp"] <= end_time]
 
-    if query is not None:
-        results = results[
-            results["message"].str.contains(
-                query,
-                case=False,
-                na=False
-            )
-        ]
+# ============================================================
+# TOKENIZATION
+# ============================================================
 
-    return results[["timestamp","message"]].head(10)
+def tokenize(text: str) -> list[str]:
+    """
+    Convert a log message into normalized searchable terms.
 
-# Move tokenize to the top 
+    Examples:
 
-def tokenize(text:str):
-    text = text.lower()
+        "instruction cache parity error"
+        -> ["instruction", "cache", "parity", "error"]
+
+        "fpr29=0xffffffff"
+        -> ["fpr29", "0xffffffff"]
+
+        "172.16.96.116:33569"
+        -> ["172.16.96.116:33569"]
+    """
 
     return re.findall(
         r"[a-z0-9_./:-]+",
-        text
+        text.lower()
     )
 
 
-# Move Postional Index to top
+# ============================================================
+# LOAD DATA
+# ============================================================
+
+df = pd.read_parquet(DATA_PATH)
+
+
+# ============================================================
+# DOCUMENT LENGTH
+# ============================================================
+
+df["doc_length"] = df["message"].apply(
+    lambda text: len(tokenize(text))
+)
+
+N = len(df)
+
+AVGDL = df["doc_length"].mean()
+
+
+# ============================================================
+# POSITIONAL INDEX
+#
+# term -> {
+#     doc_id -> [positions]
+# }
+#
+# Example:
+#
+# positional_index["cache"]
+#
+# {
+#     0: [1],
+#     1: [1],
+#     42: [3]
+# }
+# ============================================================
+
 positional_index = {}
 
+
 for doc_id, row in df.iterrows():
+
     terms = tokenize(row["message"])
 
     for position, term in enumerate(terms):
@@ -68,347 +98,156 @@ for doc_id, row in df.iterrows():
             .setdefault(doc_id, []) \
             .append(position)
 
-# print(search_logs(df, severity="INFO"))
-# print(search_logs(df, severity="FATAL"))
-# print(search_logs(df, severity="WARNING"))
-# print(search_logs(df, severity="SEVERE"))
-# print(search_logs(df, severity="ERROR"))
-# print(search_logs(df, component="DISCOVERY"))
-# print(search_logs(df, severity="ERROR", component="DISCOVERY"))
-# print(search_logs(df))
-# print(search_logs(df,severity="INFO",start_time=datetime.strptime("2005-06-28 09:53:39.479164","%Y-%m-%d %H:%M:%S.%f"),end_time=datetime.strptime("2005-08-02 21:15:36.811548","%Y-%m-%d %H:%M:%S.%f")))
 
-
-
-# print(f"{search_logs(df,query="instruction cache")}\n")
-# print(search_logs(df,query="core files"))
-# print(search_logs(df,query="parity error"))
-
-# Number of documents in the corpus
-N = len(df)
-
-# def document_frequency(term):
-#     return df["message"].str.contains(term,case=False,na=False).sum()
-    
-
-def idf(doc_freq):
-    return math.log(1+(N-doc_freq+0.5)/(doc_freq+0.5))
-
-def term_frequency(term):
-    return df.loc[
-        df["message"].str.contains(term,case=False,na=False),
-        ["message"]
-    ].assign(
-        term_freq = lambda x: x["message"].str.lower().str.count(term.lower())
-    )
-
-
-# for term in ["error", "cache", "parity", "KERNDTLB", "kernel"]:
-#     doc_freq = document_frequency(term)
-#     inverse_doc_freq = idf(doc_freq)
-#     term_freq = term_frequency(term)
-#     print(f"\nTerm: {term}, DF: \n{doc_freq}, \nIDF: {inverse_doc_freq}, \n {term_freq["term_freq"].value_counts().sort_index()} \n")
-
-df["doc_length"] = df["message"].str.split().str.len()
-
-# print(df["doc_length"].describe())
-
-avgdl = df["doc_length"].mean()
-
-# print("Average document length: ", avgdl)
-
-# print(df[["message","doc_length"]].head(-10))
-
-# print(df)
-
-# Initial BM25 Score Function
-
-# def BM25score(document:str,query:str):
-#     score = 0
-#     k1 = 1.2
-#     b = 0.75
-
-#     for term in query.split():
-#         DF = document_frequency(term)
-#         IDF = idf(DF)
-#         TF = document.lower().split().count(term.lower())
-#         dl = len(document.split())
-#         bm25_contribution_of_term = (
-#             IDF * (
-#                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
-#             )
-#         )
-
-#         # print(
-#         #     term,
-#         #     "DF =", DF,
-#         #     "IDF =", IDF,
-#         #     "TF =", TF,
-#         #     "DL =", dl,
-#         #     "contribution =", bm25_contribution_of_term
-#         # )
-
-#         score += bm25_contribution_of_term
-
-#     return score
-
-
-# document = "instruction cache parity error corrected"
-# query = "cache error"
-
-# print(BM25score(document, query))
-
-# def bm25_search(query:str,top_k:int=10):
-#     results = []
-
-#     for _, row in df.iterrows():
-
-#         document = row["message"]
-#         score = BM25score(document,query)
-
-#         results.append(
-#             {"score": score,
-#              "log_id": row["log_id"],
-#              "timestamp": row["timestamp"],
-#              "node": row["node"],
-#              "severity": row["severity"],
-#              "message": row["message"]
-#             }
-#         )
-
-#     results.sort(key=lambda x: x["score"], reverse=True)
-#     return results[:top_k]
-
-# print(BM25_search("cache error"))
-
-## Learn Inverted Index
+# ============================================================
+# INVERTED INDEX
+#
+# term -> {
+#     doc_id -> term_frequency
+# }
+#
+# Example:
+#
+# inverted_index["error"]
+#
+# {
+#     0: 1,
+#     1: 1,
+#     25: 3
+# }
+# ============================================================
 
 inverted_index = {}
 
-# for doc_id, row in df.iterrows():
 
-#     document = row["message"]
-
-#     terms = document.lower().split()
-
-#     for term in terms:
-#         inverted_index.setdefault(term,set()).add(doc_id)
-
-## Updating Inverted Index to store term : {doc_id : TF of term}
 for doc_id, row in df.iterrows():
 
-    document:str = row["message"]
+    terms = tokenize(row["message"])
 
-    terms = document.lower().split()
     term_counts = Counter(terms)
 
     for term, tf in term_counts.items():
-        inverted_index.setdefault(term,{})[doc_id] = tf
+
+        inverted_index \
+            .setdefault(term, {})[doc_id] = tf
 
 
-# print(inverted_index["cache"])
-# print(inverted_index["error"])
+# ============================================================
+# DOCUMENT FREQUENCY
+# ============================================================
 
-query = "cache error"
+def document_frequency(term: str) -> int:
 
-# candidate_docs = set()
+    return len(
+        positional_index.get(
+            term.lower(),
+            {}
+        )
+    )
 
-# for term in query.split():
-#     candidate_docs.update(inverted_index[term])
 
-# print(candidate_docs)
-# print(len(candidate_docs))
+# ============================================================
+# IDF - Inverse Document Frequency
+# ============================================================
 
-# Updating Document Frequency function, after adding positional index
-def document_frequency(term):
-    return len(positional_index.get(term.lower(), {}))
+def idf(doc_freq: int) -> float:
 
-# Created an index for IDF
+    return math.log(
+        1
+        + (
+            (N - doc_freq + 0.5)
+            /
+            (doc_freq + 0.5)
+        )
+    )
+
+
+# ============================================================
+# PRECOMPUTE IDF
+# ============================================================
+
 idf_scores = {}
 
 for term in inverted_index:
-    doc_freq = document_frequency(term)
-    idf_scores[term] = idf(doc_freq)
+
+    df_score = document_frequency(term)
+
+    idf_scores[term] = idf(df_score)
 
 
-# print(idf_scores["cache"])
-# print(idf_scores["error"])
-# print(idf_scores["kernel"])
+# ============================================================
+# BM25 SCORING
+# ============================================================
 
+def bm25_score(
+    doc_id: int,
+    terms: list[str],
+    doc_length: int
+) -> float:
 
-# def updated_BM25score(doc_id:int,query:str,dl:int):
-#     # Update with added postional index
-#     score = 0
-#     k1 = 1.2
-#     b = 0.75
-
-#     for term in query.lower().split():
-#         IDF = idf_scores[term]
-#         positions = positional_index[term].get(doc_id, [])
-#         TF = len(positions)
-#         bm25_contribution_of_term = (
-#             IDF * (
-#                 (TF*(k1+1)) / (TF+ k1 * (1 - b + b * (dl/avgdl)))
-#             )
-#         )
-
-#         score += bm25_contribution_of_term
-
-#     return score
-
-# Update after implementation of Phrase and Term parsing 
-def updated_BM25score(doc_id:int,terms:list,dl:int):
-    # Update with added postional index
-    score = 0
-    k1 = 1.2
-    b = 0.75
+    score = 0.0
 
     for term in terms:
 
+        term = term.lower()
+
+        # Unknown query terms contribute nothing.
         if term not in idf_scores:
             continue
 
-        idf_value = idf_scores[term]
-        positions = positional_index[term].get(doc_id, [])
-        tf = len(positions)
+        tf = inverted_index[
+            term
+        ].get(doc_id, 0)
 
         if tf == 0:
             continue
 
+        IDF = idf_scores[term]
 
-        bm25_contribution_of_term = (
-            idf_value * (
-                (tf*(k1+1)) / (tf+ k1 * (1 - b + b * (dl/avgdl)))
+        contribution = (
+            IDF
+            * (
+                (tf * (K1 + 1))
+                /
+                (
+                    tf
+                    + K1
+                    * (
+                        1
+                        - B
+                        + B * (doc_length / AVGDL)
+                    )
+                )
             )
         )
 
-        score += bm25_contribution_of_term
+        score += contribution
 
     return score
 
 
-def updated_BM25_search(query:str,top_k:int=10):
-
-    # Update candidate retival, after addition of positional index
-    candidate_docs = set()
-    for term in query.lower().split():
-        candidate_docs.update(positional_index.get(term, {}))
-
-    print("Candidates:", len(candidate_docs))
-
-    results = []
-
-    for doc_id in candidate_docs:
-
-        row = df.loc[doc_id]
-        score = updated_BM25score(doc_id,query,row["doc_length"])
-        
-        results.append(
-            {"score": score,
-             "log_id": row["log_id"],
-             "timestamp": row["timestamp"],
-             "node": row["node"],
-             "severity": row["severity"],
-             "message": row["message"]
-            }
-        )
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    return results[:top_k]
-
-# print(updated_BM25_search(query="parity error"))
-
-# print("Rows:", len(df))
-
-# print("DF(error):", document_frequency("error"))
-# print("Index(error):", len(inverted_index.get("error", set())))
-
-# print("DF(cache):", document_frequency("cache"))
-# print("Index(cache):", len(inverted_index.get("cache", set())))
-# print(updated_BM25_search(query="cache error"))
-
-# for row in df[["log_id","message"]].head(20).itertuples():
-#     print(row.log_id, row.message)
-
-
-
-# tests = [
-#     "instruction cache parity error corrected",
-#     "double-hummer alignment exceptions",
-#     "CE sym 2, at 0x0b5eee0, mask 0x05",
-#     "CioStream socket to 172.16.96.116:33569",
-#     "generating core.862",
-#     "R02-M1-N0-C:J12-U11",
-#     "fpr29=0xffffffff",
-#     "/g/g24/germann2/SPaSM_mini/MEAM/r13"
-# ]
-
-# for text in tests:
-#     print(text)
-#     print(tokenize(text))
-#     print()
-
-# documents = {
-#     0: "instruction cache parity error",
-#     1: "cache parity instruction error"
+# ============================================================
+# QUERY PARSER
+#
+# Example:
+#
+#     cache "parity error"
+#
+# becomes:
+#
+# {
+#     "terms": ["cache"],
+#     "phrases": [["parity", "error"]]
 # }
+# ============================================================
 
-# positional_index = {}
+def parse_query(query: str) -> dict:
 
-# for doc_id, document in documents.items():
-
-#     terms = document.lower().split()
-
-#     for position, term in enumerate(terms):
-#         positional_index.setdefault(term,{}).setdefault(doc_id,[]).append(position)
-
-
-# def phrase_search(query:str, positional_index:dict):
-#     query_terms = query.lower().split()
-
-#     if not query_terms:
-#         return []
-
-#     first_term = query_terms[0]
-
-#     candidate_docs = positional_index.get(first_term,[])
-
-#     matches = []
-
-#     for doc_id, positions in candidate_docs.items():
-#         for position in positions:
-#             match = True
-
-#             for offset, term in enumerate(query_terms[1:],start=1):
-#                 term_positions = positional_index.get(term,{}).get(doc_id,[])
-
-#                 if position + offset not in term_positions:
-#                     match = False
-#                     break
-
-#             if match:
-#                 matches.append(doc_id)
-#                 break
-
-#     return matches
-
-# print(positional_index)
-# print(phrase_search("instruction cache", positional_index))
-# print(phrase_search("cache parity", positional_index))
-# print(phrase_search("parity instruction", positional_index))
-
-
-def parse_query(query:str):
-
-    # Look for occurance of the char ' " '
-    # If found, split at that point, and everything before it get's added to terms by split appending them
-    # Find the next occurance of ' " ' and split them add them into one list of phrase terms
-    # And repeat this loop until end of sentence
-    # If not found, split the str and add all to terms
     terms = []
     phrases = []
 
     inside_quotes = False
+
     current_phrase = []
     current_text = []
 
@@ -417,443 +256,605 @@ def parse_query(query:str):
         nonlocal current_text
 
         if not current_text:
-            return 
+            return
 
         text = "".join(current_text)
 
         tokens = tokenize(text)
 
         if inside_quotes:
+
             current_phrase.extend(tokens)
+
         else:
+
             terms.extend(tokens)
 
         current_text = []
 
+
     for char in query:
 
-        # Quote Encountered
+        # ----------------------------------------------------
+        # Quote
+        # ----------------------------------------------------
+
         if char == '"':
 
-            # Closing Quote
             if inside_quotes:
+
+                # Finish the phrase.
                 flush_text()
 
                 if current_phrase:
-                    phrases.append(current_phrase)
+
+                    phrases.append(
+                        current_phrase
+                    )
 
                 current_phrase = []
 
-            # Opening Quote
             else:
+
+                # Start a phrase.
                 flush_text()
 
             inside_quotes = not inside_quotes
 
-        # Whitespace encountered
+
+        # ----------------------------------------------------
+        # Whitespace
+        # ----------------------------------------------------
+
         elif char.isspace():
+
             flush_text()
-        # Normal Charcter
+
+
+        # ----------------------------------------------------
+        # Normal character
+        # ----------------------------------------------------
+
         else:
+
             current_text.append(char)
 
+
+    # Flush anything remaining at the end.
     flush_text()
 
-    return{
-        "terms" :  terms,
-        "phrases" : phrases
+
+    return {
+        "terms": terms,
+        "phrases": phrases
     }
 
-# tests = [
-#     "cache error",
-#     '"cache error"',
-#     'cache "parity error"',
-#     '"instruction cache" parity error',
-#     'cache    "parity error"    kernel',
-#     '"172.16.96.116:33569"',
-# ]
 
-# for query in tests:
-#     print(query)
-#     print(parse_query(query))
-#     print()
+# ============================================================
+# GET SCORING TERMS
+#
+# Normal terms + terms inside phrases
+#
+# Example:
+#
+# cache "parity error"
+#
+# ->
+#
+# ["cache", "parity", "error"]
+# ============================================================
 
-# Updating Phrase Search
-def phrase_search(phrase_terms:list, positional_index:dict):
+def get_scoring_terms(
+    parsed_query: dict
+) -> list[str]:
 
-
-    if not phrase_terms:
-        return set()
-
-    first_term = phrase_terms[0]
-
-    candidate_docs = positional_index.get(first_term,[])
-
-    matches = set()
-
-    for doc_id, positions in candidate_docs.items():
-        for position in positions:
-            match = True
-
-            for offset, term in enumerate(phrase_terms[1:],start=1):
-                term_positions = positional_index.get(term,{}).get(doc_id,[])
-
-                if position + offset not in term_positions:
-                    match = False
-                    break
-
-            if match:
-                matches.add(doc_id)
-                break
-
-    return matches
-
-
-# print(
-#     phrase_search(
-#         ["instruction", "cache"],
-#         positional_index
-#     )
-# )
-
-# print(
-#     phrase_search(
-#         ["cache", "parity"],
-#         positional_index
-#     )
-# )
-
-# print(
-#     phrase_search(
-#         ["parity", "instruction"],
-#         positional_index
-#     )
-# )
-
-# Weights
-
-BM25_WEIGHT = 1.0
-PHRASE_WEIGHT = 3.0
-PROXIMITY_WEIGHT = 2.0
-
-
-# Scoring Terms
-
-def get_scoring_terms(parsed_query):
-
-    scoring_terms = parsed_query["terms"].copy()
+    scoring_terms = (
+        parsed_query["terms"].copy()
+    )
 
     for phrase in parsed_query["phrases"]:
-        scoring_terms.extend(phrase)
+
+        scoring_terms.extend(
+            phrase
+        )
 
     return scoring_terms
 
 
-# Retrive Candidate Documents
+# ============================================================
+# CANDIDATE RETRIEVAL
+# ============================================================
 
-def get_term_candidates(terms):
+def get_term_candidates(
+    terms: list[str]
+) -> set[int]:
+
     candidate_docs = set()
 
     for term in terms:
+
         candidate_docs.update(
-            positional_index.get(term,{})
+            positional_index.get(
+                term.lower(),
+                {}
+            )
         )
 
     return candidate_docs
 
-# Retrive multiple phrases candidates
 
-def get_phrase_candidates(phrases):
+def get_candidates(
+    parsed_query: dict
+) -> set[int]:
 
-    if not phrases:
-        return None
-
-    candidate_docs = None
-
-    for phrase in phrases:
-
-        phrase_docs = phrase_search(
-            phrase,
-            positional_index
-        )
-
-        if candidate_docs is None:
-            candidate_docs = phrase_docs
-        else:
-            candidate_docs &= phrase_docs
-
-    return candidate_docs
-
-
-# Combining Lexical and Phrase Retreival
-
-def get_candidates(parsed_query):
-    scoring_terms = get_scoring_terms(parsed_query)
-
-    return get_term_candidates(scoring_terms)
-
-    # phrase_docs = get_phrase_candidates(
-    #     parsed_query["phrases"]
-    # )
-
-    # if phrase_docs is None:
-    #     return term_docs
-
-    # return term_docs & phrase_docs
-
-
-# Adding Phrase Bonus
-# PHRASE_BONUS:float = 2.0
-
-# def calculate_phrase_bonus(doc_id:int, phrases:list):
-#     bonus:float = 0
-
-#     for phrase in phrases:
-
-#         phrase_docs = phrase_search(
-#             phrase,
-#             positional_index
-#         )
-
-#         if doc_id in phrase_docs:
-#             bonus += PHRASE_BONUS
-
-#     return bonus
-
-def phrase_matches(doc_id: int, phrase: list):
-
-    phrase_docs = phrase_search(
-        phrase,
-        positional_index
+    scoring_terms = get_scoring_terms(
+        parsed_query
     )
 
-    return doc_id in phrase_docs
+    return get_term_candidates(
+        scoring_terms
+    )
 
-def calculate_phrase_score(doc_id: int, phrases: list):
+
+# ============================================================
+# EXACT PHRASE SEARCH
+#
+# Example:
+#
+# ["parity", "error"]
+#
+# matches:
+#
+#     parity error
+#
+# but not:
+#
+#     parity was reported as an error
+# ============================================================
+
+def phrase_search(
+    phrase_terms: list[str]
+) -> set[int]:
+
+    if not phrase_terms:
+        return set()
+
+
+    phrase_terms = [
+        term.lower()
+        for term in phrase_terms
+    ]
+
+
+    first_term = phrase_terms[0]
+
+    candidate_docs = positional_index.get(
+        first_term,
+        {}
+    )
+
+
+    matches = set()
+
+
+    for doc_id, positions in candidate_docs.items():
+
+        for position in positions:
+
+            match = True
+
+
+            for offset, term in enumerate(
+                phrase_terms[1:],
+                start=1
+            ):
+
+                term_positions = (
+                    positional_index
+                    .get(term, {})
+                    .get(doc_id, [])
+                )
+
+
+                if position + offset not in term_positions:
+
+                    match = False
+
+                    break
+
+
+            if match:
+
+                matches.add(doc_id)
+
+                break
+
+
+    return matches
+
+
+# ============================================================
+# CHECK WHETHER A DOCUMENT MATCHES A PHRASE
+# ============================================================
+
+def phrase_matches(
+    doc_id: int,
+    phrase: list[str]
+) -> bool:
+
+    return doc_id in phrase_search(
+        phrase
+    )
+
+
+# ============================================================
+# PHRASE SCORE
+# ============================================================
+
+def calculate_phrase_score(
+    doc_id: int,
+    phrases: list[list[str]]
+) -> float:
 
     matched_phrases = 0
 
+
     for phrase in phrases:
 
-        if phrase_matches(doc_id, phrase):
+        if phrase_matches(
+            doc_id,
+            phrase
+        ):
+
             matched_phrases += 1
 
-    return PHRASE_WEIGHT * matched_phrases
 
-def min_term_distance(doc_id:int, term1: str, term2: str):
+    return (
+        PHRASE_WEIGHT
+        * matched_phrases
+    )
 
-    positions1 = positional_index.get(term1.lower(),{}).get(doc_id,[])
-    positions2 = positional_index.get(term2.lower(),{}).get(doc_id,[])
 
-    if not positions1 or not positions2:
-        return None
+# ============================================================
+# MINIMUM SPAN
+#
+# Finds the smallest window containing all query terms.
+#
+# Example:
+#
+# cache search parity error
+#
+# positions:
+#
+# cache  -> 1
+# parity -> 3
+# error  -> 4
+#
+# span = 4
+# ============================================================
 
-    min_distance = float("inf")
+def minimum_span(
+    doc_id: int,
+    terms: list[str]
+):
 
-    for position1 in positions1:
-        for position2 in positions2:
-
-            distance = abs(position1 - position2)
-
-            if distance < min_distance:
-                min_distance = distance
-
-    return min_distance
-
-from itertools import product
-
-def minimum_span(doc_id:int, terms:list):
     positions = []
+
 
     for term in terms:
 
         term_positions = (
             positional_index
-            .get(term.lower(),{})
-            .get(doc_id,[])
+            .get(
+                term.lower(),
+                {}
+            )
+            .get(
+                doc_id,
+                []
+            )
         )
 
+
         if not term_positions:
+
             return None
 
-        positions.append(term_positions)
+
+        positions.append(
+            term_positions
+        )
+
 
     min_span = float("inf")
 
-    for combination in product(*positions):
 
-        start = min(combination)
-        end = max(combination)
+    for combination in product(
+        *positions
+    ):
 
-        span = end - start + 1
+        start = min(
+            combination
+        )
+
+        end = max(
+            combination
+        )
+
+        span = (
+            end
+            - start
+            + 1
+        )
+
 
         if span < min_span:
+
             min_span = span
+
 
     return min_span
 
-def proximity_score(doc_id:int, terms:list):
-    span = minimum_span(doc_id, terms)
 
+# ============================================================
+# PROXIMITY SCORE
+#
+# Perfect adjacency:
+#
+#     cache parity error
+#     -> 1.0
+#
+# One extra token:
+#
+#     cache search parity error
+#     -> 0.5
+#
+# Two extra tokens:
+#
+#     -> 0.333...
+# ============================================================
+
+def proximity_score(
+    doc_id: int,
+    terms: list[str]
+):
+
+    span = minimum_span(
+        doc_id,
+        terms
+    )
+
+
+    # One or more query terms are missing.
     if span is None:
-        return 0.0
 
-    minimum_possible_span = len(terms)
-
-    extra_distance = span - minimum_possible_span
-
-    return 1 / (1 + extra_distance)
-
-# PROXIMITY_WEIGHT = 2.0
+        return None
 
 
-def search(query:str, top_k:int=10):
-    parsed = parse_query(query)
+    # Number of distinct query terms represents
+    # the theoretical minimum span.
+    minimum_possible_span = len(
+        set(terms)
+    )
 
-    # print("PARSED:", parsed)
-    # print("TERMS:", parsed["terms"])
-    # print("PHRASES:", parsed["phrases"])
 
-    scoring_terms = get_scoring_terms(parsed)
+    extra_distance = (
+        span
+        - minimum_possible_span
+    )
 
-    candidate_docs = get_candidates(parsed)
+
+    return 1 / (
+        1 + extra_distance
+    )
+
+
+# ============================================================
+# FINAL SEARCH / RANKING
+# ============================================================
+
+def search(
+    query: str,
+    top_k: int = 10
+) -> list[dict]:
+
+    # --------------------------------------------------------
+    # Parse query
+    # --------------------------------------------------------
+
+    parsed_query = parse_query(
+        query
+    )
+
+
+    # --------------------------------------------------------
+    # Extract terms used for scoring
+    # --------------------------------------------------------
+
+    scoring_terms = get_scoring_terms(
+        parsed_query
+    )
+
+
+    # Empty query.
+    if not scoring_terms:
+
+        return []
+
+
+    # --------------------------------------------------------
+    # Retrieve candidate documents
+    # --------------------------------------------------------
+
+    candidate_docs = get_candidates(
+        parsed_query
+    )
+
 
     results = []
+
+
+    # --------------------------------------------------------
+    # Score candidates
+    # --------------------------------------------------------
 
     for doc_id in candidate_docs:
 
         row = df.loc[doc_id]
 
-        bm25 = updated_BM25score(
+
+        # ----------------------------------------------------
+        # BM25
+        # ----------------------------------------------------
+
+        bm25 = bm25_score(
             doc_id,
             scoring_terms,
             row["doc_length"]
         )
 
-        # phrase_bonus = phrase_matches(
-        #     doc_id,
-        #     parsed["phrases"]
-        # )
+
+        # ----------------------------------------------------
+        # Phrase score
+        # ----------------------------------------------------
+
         phrase_score = calculate_phrase_score(
             doc_id,
-            parsed["phrases"]
+            parsed_query["phrases"]
         )
+
+
+        # ----------------------------------------------------
+        # Proximity
+        # ----------------------------------------------------
 
         proximity = proximity_score(
             doc_id,
             scoring_terms
         )
 
+
+        # A document missing one or more query terms
+        # receives no proximity contribution.
         if proximity is None:
+
             proximity = 0.0
 
-        final_score = bm25 + phrase_score + PROXIMITY_WEIGHT * proximity
 
-        results.append({
-            "score": final_score,
-            "bm25": bm25,
-            "phrase_score": phrase_score,
-            "proximity": proximity,
-            "log_id": row["log_id"],
-            "timestamp": row["timestamp"],
-            "node": row["node"],
-            "severity": row["severity"],
-            "message": row["message"]
-        })
+        # ----------------------------------------------------
+        # Final ranking score
+        # ----------------------------------------------------
 
-    results.sort(key = lambda x: x["score"], reverse=True)
-
-    return results[:top_k]
-
-# print(
-#     search("cache parity error", 5)
-# )
-
-# print(
-#     search('"cache parity error"', 5)
-# )
-
-# print(
-#     search('cache "parity error"', 5)
-# )
-
-
-# print(search("cache parity error", 10))
-
-from collections import defaultdict
-
-terms = ["cache", "parity", "error"]
-
-groups = defaultdict(list)
-
-candidate_docs = get_term_candidates(terms)
-
-for doc_id in candidate_docs:
-
-    proximity = proximity_score(doc_id, terms)
-
-    groups[proximity].append(doc_id)
-
-for proximity in sorted(groups, reverse=True):
-
-    print(
-        f"\nPROXIMITY = {proximity:.3f} "
-        f"({len(groups[proximity])} docs)"
-    )
-
-    for doc_id in groups[proximity][:3]:
-
-        print(
-            "   ",
-            doc_id,
-            "|",
-            df.loc[doc_id, "message"]
+        final_score = (
+            BM25_WEIGHT * bm25
+            + phrase_score
+            + PROXIMITY_WEIGHT * proximity
         )
 
 
+        # ----------------------------------------------------
+        # Store result
+        # ----------------------------------------------------
 
-# print(
-#     df.loc[1]["message"],
-#     minimum_span(
-#         1,
-#         ["cache", "parity", "error"]
-#     )
-# )
+        results.append({
+
+            "score": final_score,
+
+            "bm25": bm25,
+
+            "phrase_score": phrase_score,
+
+            "proximity": proximity,
+
+            "log_id": row["log_id"],
+
+            "timestamp": row["timestamp"],
+
+            "node": row["node"],
+
+            "severity": row["severity"],
+
+            "message": row["message"]
+        })
 
 
-# print(
-#     minimum_span(
-#         0,
-#         ["cache", "parity", "error"]
-#     )
-# )
+    # --------------------------------------------------------
+    # Rank
+    # --------------------------------------------------------
 
-# print(
-#     proximity_score(
-#         0,
-#         ["cache", "parity", "error"]
-#     )
-# )
+    results.sort(
+        key=lambda result: result["score"],
+        reverse=True
+    )
 
-# import random
 
-# def five_rand_docs():
+    # --------------------------------------------------------
+    # Top-K
+    # --------------------------------------------------------
 
-#     for doc_id in random.sample(
-#         range(len(df)),
-#         5
-#     ):
-#         yield doc_id
+    return results[:top_k]
 
-# for doc_id in five_rand_docs():
 
-#     score = proximity_score(
-#         doc_id,
-#         ["cache", "parity", "error"]
-#     )
+# ============================================================
+# TESTING
+# ============================================================
 
-#     print(
-#         f"Doc: {doc_id} | "
-#         f"Proximity: {score:.3f} | "
-#         f"{df.loc[doc_id, 'message']}"
-#     )
+# if __name__ == "__main__":
+
+#     test_queries = [
+
+#         "cache error",
+
+#         "parity error",
+
+#         '"parity error"',
+
+#         'cache "parity error"',
+
+#         "core files",
+#     ]
+
+
+#     for query in test_queries:
+
+#         print()
+#         print("=" * 80)
+#         print(f"QUERY: {query}")
+#         print("=" * 80)
+
+
+#         results = search(
+#             query,
+#             top_k=3
+#         )
+
+
+#         for result in results:
+
+#             print(
+#                 f"{result['score']:.2f} | "
+#                 f"BM25={result['bm25']:.2f} | "
+#                 f"Phrase={result['phrase_score']:.2f} | "
+#                 f"Proximity={result['proximity']:.2f}"
+#             )
+
+#             print(
+#                 f"    {result['message']}"
+#             )
+
+# ==========================================
+# Evaluating Retreival Quality
+# ==========================================
+
+# query = "cache parity error"
+# results = search(query, top_k=10)
+results = search("cache problem", top_k=10)
+
+for rank, result in enumerate(results, start=1):
+    print(
+        f"{rank:2}. "
+        f"{result['score']:.2f} | "
+        f"log_id={result['log_id']} | "
+        f"{result['timestamp']} | "
+        f"{result['message']}"
+    )
