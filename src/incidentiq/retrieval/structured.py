@@ -1052,16 +1052,60 @@ def hybrid_search(query:str, top_k:int=10, semantic_k:int=50):
 #     )
 
 
-results = hybrid_search(
-    "cache problem",
-    top_k=10
-)
 
-for result in results:
+# results = hybrid_search(
+#     "cache problem",
+#     top_k=10
+# )
 
-    print(
-        f"{result['score']:.3f} | "
-        f"BM25={result['bm25_norm']:.3f} | "
-        f"SEM={result['semantic_norm']:.3f} | "
-        f"{result['message']}"
+# for result in results:
+
+#     print(
+#         f"{result['score']:.3f} | "
+#         f"BM25={result['bm25_norm']:.3f} | "
+#         f"SEM={result['semantic_norm']:.3f} | "
+#         f"{result['message']}"
+#     )
+
+#################################
+# Search v/s Hybrid Search
+#################################
+
+
+queries = [
+    "cache error", "parity error", "core files", "machine malfucntion", "network connection failure"
+]
+
+for query in queries:
+
+    search_results = search(
+        query,
+        top_k=10
     )
+
+    hybrid_search_results = hybrid_search(
+        query,
+        top_k=10
+    )
+
+    print("#"*10+f" {query} "+"#"*10)
+
+    print("\nNormal Search\n")
+    
+    for result in search_results:
+        print(
+        f"{result['score']:.3f} |"
+        f"{result['message']}"
+      )
+
+    print("\nHybrid Search\n")
+
+    for result in hybrid_search_results:
+        print(
+            f"{result['score']:.3f} | "
+            f"BM25={result['bm25_norm']:.3f} | "
+            f"SEM={result['semantic_norm']:.3f} | "
+            f"{result['message']}"
+        )
+
+    print("\n")
