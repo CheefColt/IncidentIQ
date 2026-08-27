@@ -1112,7 +1112,7 @@ def hybrid_search(query:str, top_k:int=10, semantic_k:int=50):
 #     print("\n")
 
 
-query = "machine malfunction"
+query = "hardware stopped working"
 
 normal_results = search(
     query,
@@ -1138,5 +1138,6 @@ for rank, result in enumerate(hybrid_results, start=1):
     print(
         f"{rank:2}. "
         f"doc={result['doc_id']} | "
+        f"score={result["score"]} |"
         f"{result['message']}"
     )
