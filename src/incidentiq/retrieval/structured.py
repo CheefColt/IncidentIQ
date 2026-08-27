@@ -1072,40 +1072,71 @@ def hybrid_search(query:str, top_k:int=10, semantic_k:int=50):
 #################################
 
 
-queries = [
-    "cache error", "parity error", "core files", "machine malfucntion", "network connection failure"
-]
+# queries = [
+#     "cache error", "parity error", "core files", "machine malfucntion", "network connection failure"
+# ]
 
-for query in queries:
+# for query in queries:
 
-    search_results = search(
-        query,
-        top_k=10
-    )
+#     search_results = search(
+#         query,
+#         top_k=10
+#     )
 
-    hybrid_search_results = hybrid_search(
-        query,
-        top_k=10
-    )
+#     hybrid_search_results = hybrid_search(
+#         query,
+#         top_k=10
+#     )
 
-    print("#"*10+f" {query} "+"#"*10)
+#     print("#"*10+f" {query} "+"#"*10)
 
-    print("\nNormal Search\n")
-    
-    for result in search_results:
-        print(
-        f"{result['score']:.3f} |"
+#     print("\nNormal Search\n")
+
+#     for result in search_results:
+#         print(
+#         f"{result['score']:.3f} |"
+#         f"{result['message']}"
+#       )
+
+#     print("\nHybrid Search\n")
+
+#     for result in hybrid_search_results:
+#         print(
+#             f"{result["doc_id"]} |"
+#             f"{result['score']:.3f} | "
+#             f"BM25={result['bm25_norm']:.3f} | "
+#             f"SEM={result['semantic_norm']:.3f} | "
+#             f"{result['message']}"
+#         )
+
+#     print("\n")
+
+
+query = "machine malfunction"
+
+normal_results = search(
+    query,
+    top_k=10
+)
+
+hybrid_results = hybrid_search(
+    query,
+    top_k=10
+)
+
+print("\nNORMAL\n")
+
+for rank, result in enumerate(normal_results, start=1):
+    print(
+        f"{rank:2}. "
         f"{result['message']}"
-      )
+    )
 
-    print("\nHybrid Search\n")
+print("\nHYBRID\n")
 
-    for result in hybrid_search_results:
-        print(
-            f"{result['score']:.3f} | "
-            f"BM25={result['bm25_norm']:.3f} | "
-            f"SEM={result['semantic_norm']:.3f} | "
-            f"{result['message']}"
-        )
-
-    print("\n")
+for rank, result in enumerate(hybrid_results, start=1):
+    print(
+        f"{rank:2}. "
+        f"doc={result['doc_id']} | "
+        f"{result['message']}"
+    )
