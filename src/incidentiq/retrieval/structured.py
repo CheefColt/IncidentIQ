@@ -2,6 +2,7 @@ import math
 import re
 from collections import Counter
 from itertools import product
+from sentence_transformers import SentenceTransformer, util
 
 import pandas as pd
 
@@ -848,13 +849,219 @@ def search(
 
 # query = "cache parity error"
 # results = search(query, top_k=10)
-results = search("cache problem", top_k=10)
+# results = search("cache problem", top_k=10)
 
-for rank, result in enumerate(results, start=1):
+# for rank, result in enumerate(results, start=1):
+#     print(
+#         f"{rank:2}. "
+#         f"{result['score']:.2f} | "
+#         f"log_id={result['log_id']} | "
+#         f"{result['timestamp']} | "
+#         f"{result['message']}"
+#     )
+
+
+
+# ============================================
+# Vector Embeddings
+# ============================================
+
+model = SentenceTransformer(
+    "all-MiniLM-L6-v2"
+)
+
+log_embeddings = model.encode(
+    df["message"].tolist(),
+    show_progress_bar=True
+)
+def min_max_normalize(scores):
+
+    min_score = min(scores)
+    max_score = max(scores)
+
+    if max_score == min_score:
+        return [1.0] * len(scores)
+
+    return [
+        (score-min_score) / (max_score - min_score)
+        for score in scores
+    ]
+
+def get_semantic_candidates(query:str, top_k:int=50):
+    query_embedding = model.encode(
+        query,
+        convert_to_tensor=True
+    )
+
+    scores = util.cos_sim(
+        query_embedding,
+        log_embeddings
+    )[0]
+
+    top_scores, top_indices = scores.topk(top_k)
+
+    candidate_docs = {
+        int(doc_id)
+        for doc_id in top_indices
+    }
+
+    return candidate_docs, scores
+
+def hybrid_search(query:str, top_k:int=10, semantic_k:int=50):
+
+    parsed = parse_query(query)
+
+    scoring_terms = get_scoring_terms(parsed)
+
+    # BM25 candidates
+    bm25_candidates = get_candidates(parsed)
+
+    # Semantic Candidates
+    semantic_candidates, semantic_scores = (get_semantic_candidates(
+        query,
+        semantic_k
+    ))
+
+
+    # Combines cadidates
+
+    candidate_docs = bm25_candidates | semantic_candidates
+
     print(
-        f"{rank:2}. "
-        f"{result['score']:.2f} | "
-        f"log_id={result['log_id']} | "
-        f"{result['timestamp']} | "
+        f"BM25 candidates: "
+        f"{len(bm25_candidates)}"
+    )
+
+    print(
+        f"Semantic candidates: "
+        f"{len(semantic_candidates)}"
+    )
+
+    print(
+        f"Combined candidates: "
+        f"{len(candidate_docs)}"
+    )
+
+    # # Semantic representation of query
+    # query_embedding = model.encode(
+    #     query,
+    #     convert_to_tensor=True
+    # )
+
+    # semantic_scores = util.cos_sim(
+    #     query_embedding,
+    #     log_embeddings
+    # )[0]
+
+    results = []
+
+    for doc_id in candidate_docs:
+
+        row = df.loc[doc_id]
+
+        bm25 = bm25_score(
+            doc_id,
+            scoring_terms,
+            row["doc_length"]
+        )
+
+        semantic_score = semantic_scores[doc_id].item()
+
+        results.append({
+            "doc_id": doc_id,
+            "bm25": bm25,
+            "semantic": semantic_score,
+            "log_id": row["log_id"],
+            "timestamp": row["timestamp"],
+            "node": row["node"],
+            "severity": row["severity"],
+            "message": row["message"]
+        })
+
+    # Normalize
+
+    bm25_values = [
+        result["bm25"] for result in results
+    ]
+
+    semantic_values = [
+        result["semantic"] for result in results
+    ]
+
+    bm25_norm = min_max_normalize(bm25_values)
+
+    semantic_norm = min_max_normalize(
+        semantic_values
+    )
+
+    ALPHA = 0.6
+
+    for result, bm25, semantic in zip(results, bm25_norm, semantic_norm):
+
+        result["bm25_norm"] = bm25
+
+        result["semantic_norm"] = semantic
+
+        result["score"] = (
+            ALPHA * bm25 + (1 - ALPHA) * semantic
+        )
+
+    results.sort(key= lambda x: x["score"], reverse=True)
+
+    return results
+
+# results = hybrid_search(
+#     "cache problem",
+#     top_k=10
+# )
+
+# bm25_scores = [
+#     result["bm25"]
+#     for result in results
+# ]
+
+# semantic_scores_list = [
+#     result["semantic"]
+#     for result in results
+# ]
+
+# normalized_bm25 = min_max_normalize(bm25_scores)
+# normalized_semantic = min_max_normalize(semantic_scores_list)
+
+# for result, bm25, semantic in zip(
+#     results,
+#     normalized_bm25,
+#     normalized_semantic
+# ):
+#     result["bm25_norm"] = bm25
+#     result["semantic_norm"] = semantic
+
+# ALPHA = 0.6
+
+# for result in results:
+#     result["score"] = ( ALPHA * result["bm25_norm"] + (1 - ALPHA) * result["semantic_norm"])
+
+# results.sort(key = lambda x : x["score"], reverse=True)
+
+# for result in results[:10]:
+#     print(
+#         f"{result['bm25_norm']:.3f} | "
+#         f"{result['semantic_norm']:.3f} | "
+#         f"{result['score']:.3f} | "
+#         f"{result['message']}"
+#     )
+
+
+results = hybrid_search(
+    "cache problem",
+    top_k=10
+)
+
+for result in results:
+
+    print(
+        f"{result['score']:.3f} | "
+        f"BM25={result['bm25_norm']:.3f} | "
+        f"SEM={result['semantic_norm']:.3f} | "
         f"{result['message']}"
     )
