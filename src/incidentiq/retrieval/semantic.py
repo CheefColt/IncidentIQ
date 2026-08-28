@@ -8,7 +8,6 @@ class SemanticRetriever:
         df,
         model_name: str = "all-MiniLM-L6-v2"
     ):
-
         self.df = df
 
         self.model = SentenceTransformer(
@@ -37,7 +36,7 @@ class SemanticRetriever:
         )[0]
 
         top_scores, top_indices = scores.topk(
-            top_k
+            min(top_k, len(scores))
         )
 
         ranking = [
@@ -45,4 +44,4 @@ class SemanticRetriever:
             for doc_id in top_indices
         ]
 
-        return ranking, scores
+        return ranking, top_scores

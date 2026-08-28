@@ -6,7 +6,6 @@ class BM25Retriever:
         k1: float = 1.2,
         b: float = 0.75
     ):
-
         self.index = index
 
         self.k1 = k1
@@ -26,13 +25,19 @@ class BM25Retriever:
 
             term = term.lower()
 
-            tf = self.index.inverted_index \
-                .get(term, {}) \
+            # How many times does this term
+            # occur in this document?
+            tf = (
+                self.index.inverted_index
+                .get(term, {})
                 .get(doc_id, 0)
+            )
 
+            # Term doesn't occur in this document.
             if tf == 0:
                 continue
 
+            # How rare is this term across the corpus?
             idf = self.index.idf_scores.get(
                 term,
                 0.0
@@ -67,33 +72,43 @@ class BM25Retriever:
         terms: list[str]
     ) -> set[int]:
 
-        candidates = set()
+        candidate_docs = set()
 
         for term in terms:
 
-            candidates.update(
+            candidate_docs.update(
                 self.index.inverted_index.get(
                     term.lower(),
                     {}
                 )
             )
 
-        return candidates
+        return candidate_docs
 
     def search(
         self,
         terms: list[str]
-    ) -> list[int]:
+    ) -> list[tuple[int, float]]:
 
-        candidates = self.candidates(terms)
+        candidates = self.candidates(
+            terms
+        )
 
-        ranked = sorted(
+        doc_scores = {
+            doc_id: self.score(doc_id, terms)
+            for doc_id in candidates
+        }
+
+        ranked_docs = sorted(
             candidates,
-            key=lambda doc_id: self.score(
-                doc_id,
-                terms
-            ),
+            key=lambda doc_id: doc_scores[doc_id],
             reverse=True
         )
 
-        return ranked
+        return [
+            (
+                doc_id,
+                doc_scores[doc_id]
+            )
+            for doc_id in ranked_docs
+        ]

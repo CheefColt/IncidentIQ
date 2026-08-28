@@ -6,6 +6,20 @@ def phrase_matches(
     doc_id: int,
     positional_index: dict
 ) -> bool:
+    """
+    Check whether a phrase occurs exactly in order
+    inside a document.
+
+    Example:
+
+        phrase = ["parity", "error"]
+
+        "cache parity error corrected"
+        -> True
+
+        "cache parity problem error"
+        -> False
+    """
 
     if not phrase:
         return False
@@ -41,6 +55,9 @@ def phrase_search(
     phrase: list[str],
     positional_index: dict
 ) -> set[int]:
+    """
+    Find documents containing an exact phrase.
+    """
 
     if not phrase:
         return set()
@@ -78,6 +95,17 @@ def phrase_search(
 def minimum_span(
     positions: list[list[int]]
 ) -> int | None:
+    """
+    Find the smallest distance covering all query terms.
+
+    Example:
+
+        cache      -> [1]
+        parity     -> [2]
+        error      -> [3]
+
+        span = 3 - 1 = 2
+    """
 
     if not positions:
         return None
@@ -86,9 +114,15 @@ def minimum_span(
 
     for combination in product(*positions):
 
-        span = max(combination) - min(combination)
+        span = (
+            max(combination)
+            - min(combination)
+        )
 
-        if best_span is None or span < best_span:
+        if (
+            best_span is None
+            or span < best_span
+        ):
             best_span = span
 
     return best_span
@@ -99,6 +133,16 @@ def proximity_score(
     terms: list[str],
     positional_index: dict
 ) -> float:
+    """
+    Score how close the query terms occur
+    within a document.
+
+    Smaller span -> higher score.
+
+        span = 1 -> 1.0
+        span = 2 -> 0.5
+        span = 4 -> 0.25
+    """
 
     positions = []
 

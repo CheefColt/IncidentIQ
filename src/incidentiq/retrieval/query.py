@@ -1,25 +1,60 @@
-from itertools import product
+from incidentiq.indexing.tokenizer import tokenize
 
 
 def parse_query(query: str) -> dict:
+    """
+    Parse a search query into normal terms and quoted phrases.
+
+    Example:
+
+        cache "parity error"
+
+    becomes:
+
+        {
+            "terms": ["cache"],
+            "phrases": [["parity", "error"]]
+        }
+    """
 
     terms = []
     phrases = []
 
     inside_quotes = False
+
     current_phrase = []
     current_text = []
 
+    def flush_text():
+
+        nonlocal current_text
+
+        if not current_text:
+            return
+
+        text = "".join(current_text)
+
+        tokens = tokenize(text)
+
+        if inside_quotes:
+            current_phrase.extend(tokens)
+        else:
+            terms.extend(tokens)
+
+        current_text = []
+
     for char in query:
+
+        # ---------------------------------------------
+        # Quote
+        # ---------------------------------------------
 
         if char == '"':
 
             if inside_quotes:
 
-                if current_text:
-                    current_phrase.append(
-                        "".join(current_text)
-                    )
+                # Finish the phrase.
+                flush_text()
 
                 if current_phrase:
                     phrases.append(
@@ -27,49 +62,32 @@ def parse_query(query: str) -> dict:
                     )
 
                 current_phrase = []
-                current_text = []
-
-                inside_quotes = False
 
             else:
 
-                if current_text:
+                # Start a phrase.
+                flush_text()
 
-                    terms.append(
-                        "".join(current_text)
-                    )
+            inside_quotes = not inside_quotes
 
-                    current_text = []
+        # ---------------------------------------------
+        # Whitespace
+        # ---------------------------------------------
 
-                inside_quotes = True
+        elif char.isspace():
+
+            flush_text()
+
+        # ---------------------------------------------
+        # Normal character
+        # ---------------------------------------------
 
         else:
 
-            if char != " ":
+            current_text.append(char)
 
-                current_text.append(char)
-
-            else:
-
-                if current_text:
-
-                    text = "".join(current_text)
-
-                    if inside_quotes:
-                        current_phrase.append(text)
-                    else:
-                        terms.append(text)
-
-                    current_text = []
-
-    if current_text:
-
-        text = "".join(current_text)
-
-        if inside_quotes:
-            current_phrase.append(text)
-        else:
-            terms.append(text)
+    # Anything remaining after the loop.
+    flush_text()
 
     return {
         "terms": terms,
@@ -77,11 +95,85 @@ def parse_query(query: str) -> dict:
     }
 
 
-def get_scoring_terms(parsed_query: dict) -> list[str]:
+def get_scoring_terms(
+    parsed_query: dict
+) -> list[str]:
+    """
+    Return all terms that should participate
+    in lexical scoring.
 
-    scoring_terms = parsed_query["terms"].copy()
+    Normal terms + terms inside phrases.
+
+    Example:
+
+        {
+            "terms": ["cache"],
+            "phrases": [["parity", "error"]]
+        }
+
+    becomes:
+
+        ["cache", "parity", "error"]
+    """
+
+    scoring_terms = (
+        parsed_query["terms"].copy()
+    )
 
     for phrase in parsed_query["phrases"]:
-        scoring_terms.extend(phrase)
+
+        scoring_terms.extend(
+            phrase
+        )
 
     return scoring_terms
+
+
+def get_term_candidates(
+    terms: list[str],
+    positional_index: dict
+) -> set[int]:
+    """
+    Return documents containing at least one
+    of the supplied terms.
+
+    This is a UNION operation.
+
+    Example:
+
+        cache -> {1, 2, 5}
+        error -> {2, 3, 7}
+
+        result -> {1, 2, 3, 5, 7}
+    """
+
+    candidate_docs = set()
+
+    for term in terms:
+
+        candidate_docs.update(
+            positional_index.get(
+                term.lower(),
+                {}
+            )
+        )
+
+    return candidate_docs
+
+
+def get_candidates(
+    parsed_query: dict,
+    positional_index: dict
+) -> set[int]:
+    """
+    Get lexical candidate documents for a parsed query.
+    """
+
+    scoring_terms = get_scoring_terms(
+        parsed_query
+    )
+
+    return get_term_candidates(
+        scoring_terms,
+        positional_index
+    )
