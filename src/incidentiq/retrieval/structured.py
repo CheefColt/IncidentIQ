@@ -1,58 +1,109 @@
 from incidentiq.search import SearchEngine
 
 
-DATA_PATH = "data/processed/logs.parquet"
+DEFAULT_DATA_PATH = "data/processed/logs.parquet"
 
 
-engine = SearchEngine(DATA_PATH)
+def print_bm25_results(
+    results: list[dict],
+) -> None:
+    """Print BM25 search results."""
+
+    print("\nBM25 Search\n")
+
+    for result in results:
+
+        print(
+            f"{result['rank']:2}. "
+            f"{result.get('score', 0):.5f} | "
+            f"{result['message']}"
+        )
 
 
-query = "hardware stopped working"
+def print_semantic_results(
+    results: list[dict],
+) -> None:
+    """Print semantic search results."""
+
+    print("\nSemantic Search\n")
+
+    for result in results:
+
+        print(
+            f"{result['rank']:2}. "
+            f"{result.get('semantic_score', 0):.5f} | "
+            f"{result['message']}"
+        )
 
 
-print("\nBM25 Search\n")
+def print_hybrid_results(
+    results: list[dict],
+) -> None:
+    """Print hybrid RRF search results."""
 
-bm25_results = engine.search_bm25(
-    query,
-    top_k=10
-)
+    print("\nHybrid Search (RRF)\n")
 
-for result in bm25_results:
+    for result in results:
 
-    print(
-        f"{result['rank']:2}. "
-        f"{result.get('score', 0):.2f} | "
-        f"{result['message']}"
+        print(
+            f"{result['rank']:2}. "
+            f"{result.get('score', 0):.5f} | "
+            f"{result['message']}"
+        )
+
+
+def run_search_demo(
+    query: str,
+    data_path: str = DEFAULT_DATA_PATH,
+    top_k: int = 10,
+) -> None:
+    """
+    Run BM25, semantic, and hybrid retrieval
+    for a single query and display the results.
+    """
+
+    engine = SearchEngine(
+        data_path
+    )
+
+    bm25_results = engine.search_bm25(
+        query,
+        top_k=top_k,
+    )
+
+    semantic_results = engine.search_semantic(
+        query,
+        top_k=top_k,
+    )
+
+    hybrid_results = engine.search_hybrid(
+        query,
+        top_k=top_k,
+    )
+
+    print_bm25_results(
+        bm25_results
+    )
+
+    print_semantic_results(
+        semantic_results
+    )
+
+    print_hybrid_results(
+        hybrid_results
     )
 
 
-print("\nSemantic Search\n")
+def main() -> None:
+    """Run the default search demonstration."""
 
-semantic_results = engine.search_semantic(
-    query,
-    top_k=10
-)
+    query = "hardware stopped working"
 
-for result in semantic_results:
-
-    print(
-        f"{result['rank']:2}. "
-        f"{result['semantic_score']:.2f} | "
-        f"{result['message']}"
+    run_search_demo(
+        query=query,
+        top_k=10,
     )
 
 
-print("\nHybrid Search (RRF)\n")
-
-hybrid_results = engine.search_hybrid(
-    query,
-    top_k=10
-)
-
-for result in hybrid_results:
-
-    print(
-        f"{result['rank']:2}. "
-        f"{result['score']:.5f} | "
-        f"{result['message']}"
-    )
+if __name__ == "__main__":
+    main()

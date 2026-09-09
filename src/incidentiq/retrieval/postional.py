@@ -4,47 +4,63 @@ from itertools import product
 def phrase_matches(
     phrase: list[str],
     doc_id: int,
-    positional_index: dict
+    positional_index: dict,
 ) -> bool:
     """
-    Check whether a phrase occurs exactly in order
-    inside a document.
+    Check whether a phrase occurs exactly and
+    consecutively inside a document.
 
-    Example:
+    Parameters
+    ----------
+    phrase:
+        Ordered list of query terms.
 
-        phrase = ["parity", "error"]
+    doc_id:
+        Document to inspect.
 
-        "cache parity error corrected"
-        -> True
+    positional_index:
+        Mapping:
 
-        "cache parity problem error"
-        -> False
+            term -> doc_id -> positions
+
+    Returns
+    -------
+    bool
+        True if the phrase occurs exactly in order.
     """
 
     if not phrase:
         return False
 
-    positions = []
+    term_positions = []
 
     for term in phrase:
 
-        term_positions = positional_index.get(
+        positions = positional_index.get(
             term.lower(),
-            {}
+            {},
+        ).get(
+            doc_id,
+            [],
         )
 
-        if doc_id not in term_positions:
+        if not positions:
             return False
 
-        positions.append(
-            term_positions[doc_id]
+        term_positions.append(
+            positions
         )
 
-    for combination in product(*positions):
+    for combination in product(
+        *term_positions
+    ):
 
         if all(
-            combination[i] + 1 == combination[i + 1]
-            for i in range(len(combination) - 1)
+            left + 1 == right
+            for left, right in zip(
+                combination,
+                combination[1:],
+            )
         ):
             return True
 
@@ -53,23 +69,26 @@ def phrase_matches(
 
 def phrase_search(
     phrase: list[str],
-    positional_index: dict
+    positional_index: dict,
 ) -> set[int]:
     """
     Find documents containing an exact phrase.
+
+    Documents must contain every term before
+    positional matching is attempted.
     """
 
     if not phrase:
         return set()
 
-    candidate_docs = None
+    candidate_docs: set[int] | None = None
 
     for term in phrase:
 
         docs = set(
             positional_index.get(
                 term.lower(),
-                {}
+                {},
             )
         )
 
@@ -87,30 +106,35 @@ def phrase_search(
         if phrase_matches(
             phrase,
             doc_id,
-            positional_index
+            positional_index,
         )
     }
 
 
 def minimum_span(
-    positions: list[list[int]]
+    positions: list[list[int]],
 ) -> int | None:
     """
-    Find the smallest distance covering all query terms.
+    Find the smallest positional span covering
+    all query terms.
 
-    Example:
+    The span is:
 
-        cache      -> [1]
-        parity     -> [2]
-        error      -> [3]
+        max(position) - min(position)
 
-        span = 3 - 1 = 2
+    Example
+    -------
+    cache  -> [1]
+    parity -> [2]
+    error  -> [3]
+
+    span = 3 - 1 = 2
     """
 
     if not positions:
         return None
 
-    best_span = None
+    best_span: int | None = None
 
     for combination in product(*positions):
 
@@ -131,18 +155,23 @@ def minimum_span(
 def proximity_score(
     doc_id: int,
     terms: list[str],
-    positional_index: dict
+    positional_index: dict,
 ) -> float:
     """
-    Score how close the query terms occur
-    within a document.
+    Score the proximity of query terms in a document.
 
-    Smaller span -> higher score.
+    Smaller positional spans produce larger scores.
 
         span = 1 -> 1.0
         span = 2 -> 0.5
         span = 4 -> 0.25
+
+    Returns 0.0 when one or more query terms
+    are absent from the document.
     """
+
+    if not terms:
+        return 0.0
 
     positions = []
 
@@ -150,17 +179,24 @@ def proximity_score(
 
         term_positions = positional_index.get(
             term.lower(),
-            {}
+            {},
         )
 
-        if doc_id not in term_positions:
+        doc_positions = term_positions.get(
+            doc_id,
+            [],
+        )
+
+        if not doc_positions:
             return 0.0
 
         positions.append(
-            term_positions[doc_id]
+            doc_positions
         )
 
-    span = minimum_span(positions)
+    span = minimum_span(
+        positions
+    )
 
     if span is None:
         return 0.0
