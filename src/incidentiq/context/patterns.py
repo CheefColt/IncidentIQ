@@ -19,7 +19,11 @@ def repeated_message_patterns(
         patterns.append({
             "type": "repeated_message",
             "message": group["message"],
-            "occurrences": count
+            "occurrences": count,
+            "evidence_ids": [
+                occurrence["doc_id"]
+                for occurrence in group["occurrences"]
+            ]
         })
 
     return patterns
