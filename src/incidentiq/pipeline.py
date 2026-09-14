@@ -2,6 +2,7 @@ from incidentiq.context.builder import ContextBuilder
 from incidentiq.context.patterns import extract_patterns
 from incidentiq.reasoning.analyzer import IncidentAnalyzer
 from incidentiq.search import SearchEngine
+from incidentiq.reasoning.models import InvestigationResult
 
 class IncidentIQ:
 
@@ -19,7 +20,7 @@ class IncidentIQ:
         self,
         query: str,
         top_k: int = 10
-    ):
+    )-> InvestigationResult:
 
         results = self.engine.search_hybrid(
             query,
@@ -36,4 +37,9 @@ class IncidentIQ:
             query, context, patterns
         )
 
-        return analysis
+        return InvestigationResult(
+            query=query,
+            analysis=analysis,
+            evidence=context["evidence"],
+            patterns=patterns
+        )

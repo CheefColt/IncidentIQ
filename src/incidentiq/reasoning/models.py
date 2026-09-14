@@ -14,3 +14,9 @@ class IncidentAnalysis(BaseModel):
     observations: list[Observation] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
+
+class InvestigationResult(BaseModel):
+    query: str
+    analysis: IncidentAnalysis
+    evidence: list[dict] = Field(default_factory=list)
+    patterns: list[dict] = Field(default_factory=list)
