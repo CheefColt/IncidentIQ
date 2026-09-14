@@ -31,9 +31,18 @@ def build_reasoning_prompt(
     lines.append("")
     lines.append("TASK")
     lines.append(
-        "Analyze the incident using only the supplied evidence. "
-        "Seperate observations from hypotheses and explicitly state "
-        "what cannot be determined from the evidence."
+        "Analyze the incident using only the supplied evidence.\n"
+        "\n"
+        "Rules:\n"
+        "1. Observations must be directly supported by the supplied evidence.\n"
+        "2. Every observation must cite the evidence IDs that support it.\n"
+        "3. Hypotheses are allowed to infer possible causes, but must be clearly "
+        "labeled as hypotheses and must cite the supporting evidence.\n"
+        "4. Do not present an inferred cause as an established fact.\n"
+        "5. If evidence for a hypothesis is indirect or weak, assign lower confidence.\n"
+        "6. Unknowns should identify important questions that cannot be answered "
+        "from the supplied evidence.\n"
+        "7. Do not use external knowledge, tools, or assumptions beyond the supplied evidence."
     )
 
     return "\n".join(lines)

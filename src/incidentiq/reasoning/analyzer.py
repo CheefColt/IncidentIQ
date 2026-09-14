@@ -1,3 +1,11 @@
+import os
+
+from google import genai
+
+from incidentiq.reasoning.prompt import (
+    build_reasoning_prompt
+)
+
 from incidentiq.reasoning.models import(
     IncidentAnalysis,
     Observation,
@@ -6,6 +14,12 @@ from incidentiq.reasoning.models import(
 
 class IncidentAnalyzer:
 
+    def __init__(self, model="gemini-3.6-flash"):
+        self.client = genai.Client(
+            api_key=os.getenv("GEMINI_API_KEY")
+        )
+        self.model = model
+
     def analyze(
         self,
         query: str,
@@ -13,55 +27,23 @@ class IncidentAnalyzer:
         patterns: list[dict],
     ) -> IncidentAnalysis:
 
-        observations = []
-        hypotheses = []
+        prompt = build_reasoning_prompt(
+            query=query,
+            context=context,
+            patterns=patterns
+        )
 
-        # Build observations
-        for pattern in patterns:
+        interaction = self.client.interactions.create(
+            model=self.model,
+            input=prompt,
+            response_format={
+                "type":"text",
+                "mime_type":"application/json",
+                "schema": IncidentAnalysis.model_json_schema()
+            }
+        )
 
-            if pattern["type"] == "repeated_message":
 
-                observations.append(
-                    Observation(
-                        statement=(
-                            f"The message "
-                            f"'{pattern['message']}' "
-                            f"appears in "
-                            f"{pattern['occurrences']} retrieved events."
-                        ),
-                        evidence_ids=pattern["evidence_ids"],
-                    )
-                )
-
-        # Build hypothesis
-        if len(observations) >= 2:
-
-            evidence_ids = []
-
-            for observation in observations:
-                evidence_ids.extend(observation.evidence_ids)
-
-            hypotheses.append(
-                Hypothesis(
-                    statement=(
-                        "The repeated node-card functionality and "
-                        "assembly-information errors may indicate a "
-                        "broader node-card hardware or configuration issue."
-                    ),
-                    evidence_ids=evidence_ids,
-                    confidence=0.65,
-                )
-            )
-
-        unknowns = [
-            "The available evidence does not establish the underlying root cause.",
-            "The retrieved events span multiple months and cannot be assumed to represent one continuous incident.",
-            "The evidence does not establish whether the affected nodes share a common hardware component or configuration.",
-        ]
-
-        return IncidentAnalysis(
-            summary=f"Investigation results for: {query}",
-            observations=observations,
-            hypotheses=hypotheses,
-            unknowns=unknowns,
+        return IncidentAnalysis.model_validate_json(
+            interaction.output_text
         )
