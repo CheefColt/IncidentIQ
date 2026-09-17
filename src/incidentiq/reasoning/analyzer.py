@@ -9,6 +9,7 @@ from incidentiq.reasoning.prompt import (
 
 from incidentiq.reasoning.models import(
     IncidentAnalysis,
+    AnalyzerResult,
     Observation,
     Hypothesis
 )
@@ -27,7 +28,7 @@ class IncidentAnalyzer:
         query: str,
         context: dict,
         patterns: list[dict],
-    ) -> IncidentAnalysis:
+    ) -> AnalyzerResult:
 
         start = time.perf_counter()
 
@@ -52,6 +53,8 @@ class IncidentAnalyzer:
 
         api_time = time.perf_counter()
 
+        tool_evidence = []
+
         while True:
 
             function_call = next(
@@ -68,7 +71,11 @@ class IncidentAnalyzer:
                             interaction.output_text
                         )
 
-        
+                print("Total tool evidence : ", len(tool_evidence))
+                print(
+                    "Tool evidence IDs: ",
+                    [item["doc_id"] for item in tool_evidence]
+                )
         
                 parse_time = time.perf_counter()
         
@@ -78,7 +85,10 @@ class IncidentAnalyzer:
                     f"Parsing: {parse_time - api_time:.3f}s"
                 )
 
-                return analysis
+                return AnalyzerResult(
+                    analysis=analysis,
+                    tool_evidence=tool_evidence
+                )
 
             print("FUNCTION NAME:", repr(function_call.name))
             print("FUNCTION NAME TYPE:", type(function_call.name))
@@ -101,6 +111,8 @@ class IncidentAnalyzer:
                 query=arguments["query"],
                 top_k=arguments.get("top_k", 10)
             )
+
+            tool_evidence.extend(results)
 
             print(f"Tool returned {len(results)} results.")
 

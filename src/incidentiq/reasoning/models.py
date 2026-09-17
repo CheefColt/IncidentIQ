@@ -21,8 +21,19 @@ class IncidentAnalysis(BaseModel):
     unknowns: list[str] = Field(default_factory=list)
     next_steps: list[InvestigationStep] = Field(default_factory=list)
 
+class AnalyzerResult(BaseModel):
+    analysis: IncidentAnalysis
+    tool_evidence: list[dict] = Field(default_factory=list)
+
+class GroundingReport(BaseModel):
+    is_grounded: bool
+    retrieved_evidence_count: int
+    violations: list[dict] = Field(default_factory=list)
+
 class InvestigationResult(BaseModel):
     query: str
     analysis: IncidentAnalysis
     evidence: list[dict] = Field(default_factory=list)
+    tool_evidence: list[dict] = Field(default_factory=list)
     patterns: list[dict] = Field(default_factory=list)
+    grounding: GroundingReport

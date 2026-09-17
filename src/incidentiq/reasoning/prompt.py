@@ -52,12 +52,14 @@ def build_reasoning_prompt(
         "7. You may use the search_logs tool when the supplied evidence is "
         "insufficient to investigate the incident. Do not use external knowledge "
         "or assumptions beyond the supplied evidence and tool results.\n"
-        "8. For each important unknown, propose a concrete next investigation step "
+        "8. When additional evidence is retrieved using the search_logs tool, "
+        "incorporate that evidence into the analysis when relevant. Tool-retrieved "
+        "evidence must be cited using its doc_id just like the initial evidence.\n"
+        "9. For each important unknown, propose a concrete next investigation step "
         "that could help resolve it.\n"
-        "9. A next step must be an investigation action, not a conclusion or "
-        "speculation.\n"
-        "10. Each next step should explain why the action is useful and cite the "
-        "evidence that motivated it."
+        "10. A next step must be an investigation action, not a conclusion or "
+        "speculation. Each next step should explain why the action is useful and "
+        "cite the evidence that motivated it."
     )
 
     return "\n".join(lines)
