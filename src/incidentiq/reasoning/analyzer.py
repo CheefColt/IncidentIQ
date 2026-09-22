@@ -11,7 +11,8 @@ from incidentiq.reasoning.models import(
     IncidentAnalysis,
     AnalyzerResult,
     Observation,
-    Hypothesis
+    Hypothesis,
+    InvestigationState
 )
 
 class IncidentAnalyzer:
@@ -28,6 +29,7 @@ class IncidentAnalyzer:
         query: str,
         context: dict,
         patterns: list[dict],
+        state: InvestigationState | None = None
     ) -> AnalyzerResult:
 
         start = time.perf_counter()
@@ -37,6 +39,33 @@ class IncidentAnalyzer:
             context=context,
             patterns=patterns
         )  
+
+        if state is not None:
+            state_context = {
+                "iteration": state.iteration,
+                "previous_observations": [
+                    observation.model_dump()
+                    for observation in state.observations
+                ],
+                "previous_hypotheses": [
+                    hypothesis.model_dump()
+                    for hypothesis in state.hypotheses
+                ],
+                "unknowns": state.unknowns,
+                "previous_tool_calls": state.tool_calls,
+                "evidence": state.evidence
+            }
+
+            prompt += (
+                "\n\n CURRENT INVESTIGATION STATE:\n"
+                +json.dumps(state_context, default=str, indent=2)
+                +"\n\n"
+                "Continue the investigation from this state."
+                "Do not repeat work unnecessarily. "
+                "User search_logs if additional evidence is needed. "
+                "Set investigation_complete=true only when the available evidence"
+                "is sufficient for the current investigation."
+            )
 
         prompt_time = time.perf_counter()
 
@@ -54,6 +83,7 @@ class IncidentAnalyzer:
         api_time = time.perf_counter()
 
         tool_evidence = []
+        tool_calls = []
 
         while True:
 
@@ -87,7 +117,8 @@ class IncidentAnalyzer:
 
                 return AnalyzerResult(
                     analysis=analysis,
-                    tool_evidence=tool_evidence
+                    tool_evidence=tool_evidence,
+                    tool_calls=tool_calls
                 )
 
             print("FUNCTION NAME:", repr(function_call.name))
@@ -101,6 +132,7 @@ class IncidentAnalyzer:
                 )
 
             arguments = function_call.arguments
+            tool_calls.append(arguments["query"])
 
             print(
                 f"Tool call : {function_call.name} "

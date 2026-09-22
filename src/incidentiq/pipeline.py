@@ -3,7 +3,7 @@ from incidentiq.context.builder import ContextBuilder
 from incidentiq.context.patterns import extract_patterns
 from incidentiq.reasoning.analyzer import IncidentAnalyzer
 from incidentiq.search import SearchEngine
-from incidentiq.reasoning.models import (InvestigationResult, GroundingReport)
+from incidentiq.reasoning.models import (InvestigationResult, GroundingReport, InvestigationState)
 from incidentiq.tools.search import LogSearchTool
 from incidentiq.evaluation.grounding import validate_evidence_citations
 
@@ -20,7 +20,7 @@ class IncidentIQ:
 
         self.context_builder = ContextBuilder(self.engine.df)
         self.analyzer = IncidentAnalyzer(model=model, search_tool=self.search_tool)
-
+    
     def investigate(
         self,
         query: str,
@@ -38,6 +38,12 @@ class IncidentIQ:
 
         context = self.context_builder.build_context(
             results
+        )
+
+        state = InvestigationState(
+            query=query,
+            evidence=context["evidence"],
+            iteration=0
         )
 
         context_time = time.perf_counter()
@@ -73,6 +79,7 @@ class IncidentIQ:
             analysis=analysis,
             evidence=context["evidence"],
             tool_evidence=tool_evidence,
+            tool_calls=analyzer_result.tool_calls,
             patterns=patterns,
             grounding=GroundingReport(**grounding)
         )

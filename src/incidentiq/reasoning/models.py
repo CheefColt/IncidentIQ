@@ -20,20 +20,33 @@ class IncidentAnalysis(BaseModel):
     hypotheses: list[Hypothesis] = Field(default_factory=list)
     unknowns: list[str] = Field(default_factory=list)
     next_steps: list[InvestigationStep] = Field(default_factory=list)
+    investigation_complete: bool
 
 class AnalyzerResult(BaseModel):
     analysis: IncidentAnalysis
     tool_evidence: list[dict] = Field(default_factory=list)
+    tool_calls: list[str] = Field(default_factory=list)
 
 class GroundingReport(BaseModel):
     is_grounded: bool
     retrieved_evidence_count: int
     violations: list[dict] = Field(default_factory=list)
 
+class InvestigationState(BaseModel):
+    query: str
+    evidence: list[dict] = Field(default_factory=list)
+    tool_calls: list[str] = Field(default_factory=list)
+    observations: list[Observation] = Field(default_factory=list)
+    hypotheses: list[Hypothesis] = Field(default_factory=list)
+    unknowns: list[str] = Field(default_factory=list)
+    next_steps: list[InvestigationStep] = Field(default_factory=list)
+    iteration: int = 0
+
 class InvestigationResult(BaseModel):
     query: str
     analysis: IncidentAnalysis
     evidence: list[dict] = Field(default_factory=list)
     tool_evidence: list[dict] = Field(default_factory=list)
+    tool_calls: list[str] = Field(default_factory=list)
     patterns: list[dict] = Field(default_factory=list)
     grounding: GroundingReport
