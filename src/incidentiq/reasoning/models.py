@@ -11,6 +11,7 @@ class Hypothesis(BaseModel):
 
 class InvestigationStep(BaseModel):
     action: str
+    query: str | None = None
     reason: str
     evidence_ids: list[int] = Field(default_factory=list)
 
@@ -18,9 +19,9 @@ class IncidentAnalysis(BaseModel):
     summary: str
     observations: list[Observation] = Field(default_factory=list)
     hypotheses: list[Hypothesis] = Field(default_factory=list)
-    unknowns: list[str] = Field(default_factory=list)
-    next_steps: list[InvestigationStep] = Field(default_factory=list)
-    investigation_complete: bool
+    unknowns: list[str] = Field(default_factory=list, description=("Important questions that remain unanswerd. An unknown does not necessarily mean the investigation should continue if the available log evidence cannot reasonbly answer it."))
+    next_steps: list[InvestigationStep] = Field(default_factory=list, description="Concrete investigation actions that can be performed using the available evidence or search_tool. These should only be included when further investigation could meaningfully reduce an important unknown.")
+    investigation_complete: bool = Field(description="True when the available evidence is sufficient for the current investigation, including when remaning unkowns cannot reasonable be resolved using the available logs. False when an important remaining unkown can be meaningfully investigated using seach_logs.")
 
 class AnalyzerResult(BaseModel):
     analysis: IncidentAnalysis
