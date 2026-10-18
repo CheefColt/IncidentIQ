@@ -1,8 +1,59 @@
-.venv/
+# Byte-compiled / optimized / C-extensions
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
+*.so
 
-data/raw
-data/processed
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+.eggs/
 
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Environment and secrets
 .env
+.env.*
+!.env.example
+
+# Testing, type checking & linting
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*-checkpoint.ipynb
+
+# Data and large model artifacts (keep raw/processed and intermediate caches out)
+data/raw/
+data/processed/
+data/cache/
+*.parquet
+*.arrow
+# (Keep sample/fixture datasets if any, otherwise ignore local data)
+
+# Scratch & local exploration folders
+randomTryFolder/
+scratch/
+tmp/
+
+# Logs
+*.log
+logs/
+
+# IDE & OS-specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
