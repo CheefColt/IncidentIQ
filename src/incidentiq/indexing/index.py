@@ -2,6 +2,8 @@
 import math
 import re
 from collections import Counter
+from incidentiq.indexing.tokenizer import tokenize
+
 
 import pandas as pd
 
