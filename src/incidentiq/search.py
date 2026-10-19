@@ -1,3 +1,4 @@
+from langfuse import observe
 import pandas as pd
 
 from incidentiq.indexing.index import Index
@@ -152,7 +153,7 @@ class SearchEngine:
     # ------------------------------------------------------------------
     # HYBRID / RRF
     # ------------------------------------------------------------------
-
+    @observe(name="hybrid_retrieval", as_type="retriever")
     def search_hybrid(
         self,
         query: str,

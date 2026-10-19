@@ -12,6 +12,8 @@ from incidentiq.reasoning.models import (
 from incidentiq.tools.search import LogSearchTool
 from incidentiq.evaluation.grounding import validate_evidence_citations
 
+from langfuse import get_client, observe
+
 
 class IncidentIQ:
 
@@ -33,6 +35,7 @@ class IncidentIQ:
             search_tool=self.search_tool
         )
 
+    @observe(name="incident_investigation")
     def investigate(
         self,
         query: str,
@@ -242,6 +245,13 @@ class IncidentIQ:
             f"Reasoning: {reasoning_time - context_time:.3f}s | "
             f"Total: {reasoning_time - start:.3f}s"
         )
+
+        # ---------------------------------------------------
+        # Flush Langfuse buffer
+        # ---------------------------------------------------
+
+        langfuse_client = get_client()
+        langfuse_client.flush()
 
         # --------------------------------------------------
         # 7. Return InvestigationResult

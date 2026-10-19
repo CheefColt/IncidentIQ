@@ -1,8 +1,12 @@
+from langfuse import observe
+
+
 class LogSearchTool:
 
     def __init__(self, engine):
         self.engine = engine
 
+    @observe(name="log_search_tool", as_type="tool")
     def search(self, query: str, top_k: int = 10):
         results =  self.engine.search_hybrid(
             query=query,

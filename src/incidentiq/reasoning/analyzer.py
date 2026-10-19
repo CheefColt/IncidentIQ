@@ -1,6 +1,8 @@
 import json
 import time
 
+from langfuse import observe
+
 from incidentiq.config import GEMINI_API_KEY
 from google import genai
 
@@ -31,6 +33,7 @@ class IncidentAnalyzer:
         self.model = model
         self.search_tool = search_tool
 
+    @observe(name="incident_reasoning_step", as_type="agent")
     def analyze(
         self,
         query: str,
