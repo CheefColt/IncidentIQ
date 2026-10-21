@@ -69,6 +69,25 @@ flowchart TD
 
 ---
 
+## 📊 Telemetry Corpus & Scaling Dynamics
+
+### Evaluation Dataset: LLNL BlueGene/L Supercomputer
+The benchmark and demonstration suite operate on a curated 2,000-event log sequence from the **Lawrence Livermore National Laboratory (LLNL) BlueGene/L supercomputer** (`data/processed/logs.parquet`), capturing real hardware failures, memory parity errors, and kernel machine checks.
+
+### Architectural Scaling (From 2K to Production Scale)
+While the local demo is self-contained for rapid local evaluation without external infrastructure dependencies, the pipeline is architected for linear corpus expansion:
+
+| Subsystem | Local Demo Implementation | Production Scale Path (10M+ Logs) | Computational Complexity |
+| :--- | :--- | :--- | :---: |
+| **Sparse Index** | In-memory Inverted Postings Index | Sharded inverted index (Lucene / Tantivy / Elasticsearch) | $O(L)$ where $L \ll N$ (term posting length) |
+| **Dense Search** | Exact cosine matrix (`SentenceTransformers`) | Hierarchical Navigable Small World (HNSW) in Qdrant/FAISS | $O(\log N)$ approximate nearest neighbor |
+| **Fusion Layer** | Reciprocal Rank Fusion (RRF) | Rank merge over top-$k$ candidate lists | $O(k \log k)$ independent of total dataset size |
+| **Agent Reasoning** | Gemini Flash with bounded top-$k$ context | Identical: token cost is strictly isolated to top-$k$ evidence | **$O(1)$ context tokens** relative to corpus size |
+
+> **Key Design Decision:** By strictly separating retrieval from reasoning, LLM token consumption and latency remain constant ($O(1)$) whether searching across 2,000 logs or 20,000,000 logs.
+
+---
+
 ## 🔬 Quantitative Evaluation & Benchmark Results
 
 IncidentIQ is continuously evaluated using a dedicated automated benchmark harness (`benchmark.py`) against distributed supercomputer failure telemetry (BlueGene/L corpus):
