@@ -142,7 +142,23 @@ Every investigation run through IncidentIQ is instrumented with **Langfuse**, pr
 
 ## 🚀 Quickstart & Reproducibility
 
-### 1. Clone & Setup Environment
+### Option A: Run via Docker (Recommended, One Command)
+```bash
+git clone https://github.com/CheefColt/IncidentIQ.git
+cd IncidentIQ
+
+# 1. Create .env with your Gemini API key
+cp .env.example .env
+# Edit .env and insert your GEMINI_API_KEY
+
+# 2. Build and launch container
+docker compose up
+```
+Open [http://localhost:8501](http://localhost:8501) in your browser.
+
+---
+
+### Option B: Local Python Environment
 ```bash
 git clone https://github.com/CheefColt/IncidentIQ.git
 cd IncidentIQ
@@ -154,26 +170,14 @@ python -m venv .venv
 # source .venv/bin/activate
 
 pip install -r requirements.txt
-```
+cp .env.example .env
+# Edit .env and insert your GEMINI_API_KEY
 
-### 2. Configure API Keys
-Create a `.env` file in the project root:
-```env
-GEMINI_API_KEY="your-gemini-api-key"
-
-# Optional: Langfuse Tracing
-LANGFUSE_PUBLIC_KEY="pk-lf-..."
-LANGFUSE_SECRET_KEY="sk-lf-..."
-LANGFUSE_HOST="https://cloud.langfuse.com"
-```
-
-### 3. Launch Interactive Showcase Console
-```bash
+# Launch console
 streamlit run demo_app.py
 ```
-Open [http://localhost:8501](http://localhost:8501) in your browser to test preloaded scenarios or enter custom cluster queries.
 
-### 4. Run the Quantitative Benchmark Harness
+### Run the Evaluation Benchmark Harness
 ```bash
 python benchmark.py
 ```
